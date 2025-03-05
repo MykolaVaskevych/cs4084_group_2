@@ -1,3 +1,11 @@
 <resources>
     <string name="app_name">AppDevelopmentProjectFinal</string>
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="Timetable_Welcome">Timetable</string>
+    <string name="Profile_Welcome">Profile</string>
+    <string name="Home_Welcome">Home</string>
+    <string name="Market_Welcome">Market</string>
+
+
+
 </resources>
