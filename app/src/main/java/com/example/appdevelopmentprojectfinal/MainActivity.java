@@ -25,20 +25,18 @@ public class MainActivity extends AppCompatActivity {
         setContentView(binding.getRoot());
 //        We will set here the listener to send from the bottom navigation bar items (icons) to the appropriate fragment.
         binding.bottomNavigationView.setOnItemSelectedListener(item -> {
-            switch(item.getItemId()){
-                case R.id.market:
-                    replaceFragment(new MarketFragment());
-                    break;
-                case R.id.home:
-                    replaceFragment(new HomeFragment());
-                    break;
-                case R.id.timetable:
-                    replaceFragment(new TimetableFragment());
-                    break;
-                case R.id.profile:
-                    replaceFragment(new ProfileFragment());
-                    break;
+            int itemId = item.getItemId();
+
+            if (itemId == R.id.market) {
+                replaceFragment(new MarketFragment());
+            } else if (itemId == R.id.home) {
+                replaceFragment(new HomeFragment());
+            } else if (itemId == R.id.timetable) {
+                replaceFragment(new TimetableFragment());
+            } else if (itemId == R.id.profile) {
+                replaceFragment(new ProfileFragment());
             }
+
             return true;
         });
     }
