@@ -1,0 +1,88 @@
+{
+  "modules": [
+    {
+      "code": "EXAMPLE",
+      "name": "An example",
+      "lecturer": "Nur",
+      "slots": [
+        {
+        "day": "Monday",
+        "startTime": "14:00",
+        "endTime": "17:00",
+        "location": "Ireland",
+        "isMovable": false
+        }
+      ]
+    },
+    {
+      "code": "CS4084",
+      "name": "Mobile Application Development",
+      "lecturer": "Dr. Smith",
+      "slots": [
+        {
+          "day": "Monday",
+          "startTime": "09:00",
+          "endTime": "11:00",
+          "location": "CSG-001",
+          "isMovable": true
+        },
+        {
+          "day": "Wednesday",
+          "startTime": "14:00",
+          "endTime": "16:00",
+          "location": "CS3-001",
+          "isMovable": true
+        }
+      ],
+      "alternativeSlots": [
+        {
+          "day": "Tuesday",
+          "startTime": "09:00",
+          "endTime": "11:00",
+          "location": "CSG-002"
+        },
+        {
+          "day": "Thursday",
+          "startTime": "14:00",
+          "endTime": "16:00",
+          "location": "CS2-001"
+        }
+      ]
+    },
+    {
+      "code": "CS4052",
+      "name": "Software Engineering",
+      "lecturer": "Dr. Johnson",
+      "slots": [
+        {
+          "day": "Tuesday",
+          "startTime": "11:00",
+          "endTime": "13:00",
+          "location": "CS1-001",
+          "isMovable": true
+        },
+        {
+          "day": "Friday",
+          "startTime": "14:00",
+          "endTime": "16:00",
+          "location": "CSG-024",
+          "isMovable": false
+        }
+      ],
+      "alternativeSlots": [
+        {
+          "day": "Monday",
+          "startTime": "11:00",
+          "endTime": "13:00",
+          "location": "CSG-003"
+        },
+        {
+          "day": "Wednesday",
+          "startTime": "09:00",
+          "endTime": "11:00",
+          "location": "CS2-002"
+        }
+      ]
+    }
+  ]
+}
