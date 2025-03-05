@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
 <!--Bottom Navigation Menu Items along with their icon from drawable and ID-->
-    <item android:title="Market"
-        android:icon="@drawable/baseline_add_shopping_cart_24"
-        android:id="@+id/market"/>
     <item android:title="Home"
         android:icon="@drawable/baseline_home_24"
         android:id="@+id/home"/>
+    <item android:title="Market"
+        android:icon="@drawable/baseline_add_shopping_cart_24"
+        android:id="@+id/market"/>
     <item android:title="Timetable"
         android:icon="@drawable/baseline_access_time_24"
         android:id="@+id/timetable"/>
