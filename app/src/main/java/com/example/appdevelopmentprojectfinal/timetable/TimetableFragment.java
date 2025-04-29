@@ -67,7 +67,12 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
             Color.parseColor("#C8E6C9"), // Light Green
             Color.parseColor("#BBDEFB"), // Light Blue
             Color.parseColor("#FFE0B2"), // Light Orange
-            Color.parseColor("#E1BEE7")  // Light Purple
+            Color.parseColor("#E1BEE7"),  // Light Purple
+            Color.parseColor("#F8BBD0"), // Light Pink
+            Color.parseColor("#D7CCC8"), // Light Brown
+            Color.parseColor("#CFD8DC"), // Light Gray
+            Color.parseColor("#B2EBF2"), // Light Cyan
+            Color.parseColor("#B3E5FC")  // Lighter Blue
     };
 
     public TimetableFragment() {
@@ -618,7 +623,7 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                     locationText.setText(schedule.getTimeSlot().getLocation());
 
                     CardView cardView = (CardView) moduleView;
-                    int colorIndex = Math.abs(module.getCode().hashCode()) % MODULE_COLORS.length;
+                    int colorIndex = (Integer.parseInt(module.getCode().replaceAll("[^0-9]", "")) % 100) % MODULE_COLORS.length;
                     cardView.setCardBackgroundColor(MODULE_COLORS[colorIndex]);
 
                     TableRow.LayoutParams params = new TableRow.LayoutParams(120, 150);
