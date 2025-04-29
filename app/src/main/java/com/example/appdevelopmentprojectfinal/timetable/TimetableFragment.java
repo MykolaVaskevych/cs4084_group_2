@@ -124,6 +124,8 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
             Button confirmButton = dialogView.findViewById(R.id.btn_add_module);
             Spinner typeSpinner = dialogView.findViewById(R.id.type_spinner);
 
+            confirmButton.setVisibility(View.GONE);
+
             AlertDialog dialog = new AlertDialog.Builder(getContext())
                     .setView(dialogView)
                     .create();
@@ -132,7 +134,11 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
 
             Button btnAddAnotherSlot = dialogView.findViewById(R.id.btn_add_slot);
             btnAddAnotherSlot.setOnClickListener(innerView -> {
-
+                if (linearLayoutSlots.findViewWithTag("slotContainer") != null) {
+                    Toast.makeText(requireContext(), "Only one slot can be added at a time", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                confirmButton.setVisibility(View.VISIBLE);
                 LinearLayout newSlotLayout = new LinearLayout(requireContext());
                 newSlotLayout.setOrientation(LinearLayout.VERTICAL);
                 newSlotLayout.setTag("mainSlotLayout");
@@ -330,11 +336,52 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
             });
 
             confirmButton.setOnClickListener(confirmView -> {
-                String code = codeInput.getText().toString();
-                String name = nameInput.getText().toString();
-                String lecturer = lecturerInput.getText().toString();
-                String type = typeInput.getText().toString();
-                type = typeSpinner.getSelectedItem().toString();
+                String code = codeInput.getText().toString().trim();
+                String name = nameInput.getText().toString().trim();
+                String lecturer = lecturerInput.getText().toString().trim();
+                String type = typeSpinner.getSelectedItem().toString();
+
+                if (code.isEmpty()) {
+                    codeInput.setError("Module code is required");
+                    return;
+                }
+
+                if (name.isEmpty()) {
+                    nameInput.setError("Module name is required");
+                    return;
+                }
+
+                if (lecturer.isEmpty()) {
+                    lecturerInput.setError("Lecturer name is required");
+                    return;
+                }
+
+                // Check if at least one time slot is added
+                if (linearLayoutSlots.getChildCount() == 0) {
+                    Toast.makeText(requireContext(), "Add at least one time slot", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                // Validate code format (e.g., CS1234)
+                if (!code.matches("^[A-Za-z]{2}[0-9]{4}$")) {
+                    codeInput.setError("Invalid code format. Use 2 letters and 4 numbers. E.g., use CS1234 or ET4011.");
+                    return;
+                }
+
+                if (!name.matches("^[A-Za-z\\ ]{1,50}$")) {
+                    nameInput.setError("Invalid name format. use only (A-Z,a-z) and make sure it's less than 50 letters.");
+                    return;
+                }
+
+                if (!lecturer.matches("^[A-Za-z\\-. ]{1,30}$")) {
+                    lecturerInput.setError("Invalid name format. use only (A-Z,a-z,-,.) and make sure it's less than 30 letters.");
+                    return;
+                }
+
+                if (!validateTimeSlots()) {
+                    return;
+                }
+
 
                 List<TimeSlot> timeSlotList = new ArrayList<>();
                 List<TimeSlot> alternativeSlotsList = new ArrayList<>();
@@ -423,15 +470,13 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                                 List<TimeSlot> timeSlots = module.getTimeSlotList();
                                 if (timeSlots != null) {
                                     for (TimeSlot timeSlot : timeSlots) {
-                                        // Create a ModuleSchedule for each time slot
-                                        boolean isMovable = true; // Set according to your data
+                                        boolean isMovable = true;
                                         ModuleSchedule schedule = new ModuleSchedule(
                                                 module,
                                                 timeSlot,
                                                 isMovable,
                                                 module.isShow());
 
-                                        // Add to the master list
                                         moduleSchedules.add(schedule);
                                     }
                                 }
@@ -441,14 +486,11 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
 
 
 
-                        // Recreate adapter with fresh data
                         moduleAdapter = new ModuleManagementAdapter(moduleSchedules, TimetableFragment.this);
                         moduleListView.setAdapter(moduleAdapter);
 
-                        // Refresh the timetable grid
                         displayTimetable();
                     } else {
-                        // Handle empty data case
                         emptyView.setVisibility(View.VISIBLE);
                     }
                 }
@@ -492,7 +534,7 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                 RadioGroup radioGroup = (RadioGroup) inputView;
                 int checkedId = radioGroup.getCheckedRadioButtonId();
 
-                if (checkedId != -1) { // Check if a button is selected
+                if (checkedId != -1) {
                     RadioButton selectedRadioButton = radioGroup.findViewById(checkedId);
                     if (selectedRadioButton != null) {
                         isMovable = selectedRadioButton.getText().toString().equalsIgnoreCase("Yes");
@@ -735,5 +777,49 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                             Toast.LENGTH_SHORT).show();
                     Log.e("TimetableFragment", "Error querying the modules for deletion", e);
                 });
+    }
+    private boolean validateTimeSlots() {
+        boolean isValid = true;
+
+        for (int i = 0; i < linearLayoutSlots.getChildCount(); i++) {
+            View childView = linearLayoutSlots.getChildAt(i);
+
+            if (childView instanceof LinearLayout && "slotContainer".equals(childView.getTag())) {
+                LinearLayout slotContainer = (LinearLayout) childView;
+                LinearLayout slotLayout = slotContainer.findViewWithTag("mainSlotLayout");
+
+                if (slotLayout != null) {
+                    EditText locationField = null;
+                    for (int j = 0; j < slotLayout.getChildCount(); j++) {
+                        View view = slotLayout.getChildAt(j);
+                        if (view instanceof EditText && "Location".equals(((EditText) view).getHint())) {
+                            locationField = (EditText) view;
+                            break;
+                      }
+                    }
+                    if (locationField != null && locationField.getText().toString().trim().isEmpty()) {
+                        locationField.setError("Location is required");
+                        isValid = false;
+                    }
+
+                    Spinner startTimeSpinner = slotLayout.findViewWithTag("startTimeSpinner");
+                    Spinner endTimeSpinner = slotLayout.findViewWithTag("endTimeSpinner");
+
+                    if (startTimeSpinner != null && endTimeSpinner != null) {
+                        String startTime = startTimeSpinner.getSelectedItem().toString();
+                        String endTime = endTimeSpinner.getSelectedItem().toString();
+
+                        if (startTime.compareTo(endTime) >= 0) {
+                            Toast.makeText(requireContext(),
+                                    "End time must be after start time",
+                                    Toast.LENGTH_SHORT).show();
+                            isValid = false;
+                        }
+                    }
+                }
+            }
+        }
+
+        return isValid;
     }
 }
