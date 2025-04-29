@@ -405,18 +405,16 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
 
     private void LoadModuleDetails() {
         if (isAdded()) {
-            // Clear existing data first
             moduleSchedules.clear();
 
             FirebaseFirestore database = FirebaseFirestore.getInstance();
-            // Instead of accessing a single document, you need to get all modules
             database.collection("modules").get().addOnSuccessListener(queryDocumentSnapshots -> {
                 if (isAdded()) {
                     if (!queryDocumentSnapshots.isEmpty()) {
                         for (DocumentSnapshot document : queryDocumentSnapshots) {
                             Module module = document.toObject(Module.class);
                             if (module != null) {
-                                // Now for each module, get its timeslots from the module object
+                                module.setDocumentId(document.getId());
                                 List<TimeSlot> timeSlots = module.getTimeSlotList();
                                 if (timeSlots != null) {
                                     for (TimeSlot timeSlot : timeSlots) {
@@ -655,6 +653,8 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
         TextView moduleEndTime = bottomSheetView.findViewById(R.id.module_end_time);
         TextView moduleType = bottomSheetView.findViewById(R.id.module_type);
 
+        Button deleteModuleButton = bottomSheetView.findViewById(R.id.delete_module_button);
+
         View hideShowButton = bottomSheetView.findViewById(R.id.hide_show_button);
         hideShowButton.setVisibility(View.GONE);
 
@@ -669,7 +669,66 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
         moduleEndTime.setText(timeSlot.getEndTime());
         moduleType.setText(module.getType());
 
+        deleteModuleButton.setOnClickListener(v -> {
+            new AlertDialog.Builder(requireContext())
+                    .setTitle("Delete Module")
+                    .setMessage("Are you sure you want to delete " + module.getCode() + ": " + module.getName() + "?")
+                    .setPositiveButton("Delete", (dialog, which) -> {
+                        deleteModule(module);
+                        bottomSheetDialog.dismiss();
+                    })
+                    .setNegativeButton("Cancel", null)
+                    .show();
+        });
+
         bottomSheetDialog.setContentView(bottomSheetView);
         bottomSheetDialog.show();
+    }
+
+    private void deleteModule(Module module) {
+        FirebaseFirestore database = FirebaseFirestore.getInstance();
+
+        database.collection("modules")
+                .whereEqualTo("code", module.getCode())
+                .get()
+                .addOnSuccessListener(queryDocumentSnapshots -> {
+                    if (!queryDocumentSnapshots.isEmpty()) {
+                        String documentId = null;
+
+                        if (module.getDocumentId() != null && !module.getDocumentId().isEmpty()) {
+                            documentId = module.getDocumentId();
+                        } else {
+                            DocumentSnapshot document = queryDocumentSnapshots.getDocuments().get(0);
+                            documentId = document.getId();
+                        }
+
+                        database.collection("modules")
+                                .document(documentId)
+                                .delete()
+                                .addOnSuccessListener(aVoid -> {
+                                    Toast.makeText(requireContext(),
+                                            module.getCode() + " has been deleted",
+                                            Toast.LENGTH_SHORT).show();
+
+                                    LoadModuleDetails();
+                                })
+                                .addOnFailureListener(e -> {
+                                    Toast.makeText(requireContext(),
+                                            "Could not delete the module: " + e.getMessage(),
+                                            Toast.LENGTH_SHORT).show();
+                                    Log.e("TimetableFragment", "Error deleting of module", e);
+                                });
+                    } else {
+                        Toast.makeText(requireContext(),
+                                "Couldn't not found in database",
+                                Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    Toast.makeText(requireContext(),
+                            "Error querying modules: " + e.getMessage(),
+                            Toast.LENGTH_SHORT).show();
+                    Log.e("TimetableFragment", "Error querying the modules for deletion", e);
+                });
     }
 }

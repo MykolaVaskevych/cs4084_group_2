@@ -84,4 +84,5 @@
     <string name="module_code">Module Code</string>
     <string name="module_name">Module Name</string>
     <string name="add_module">Add Module</string>
+    <string name="delete_module">Delete Module</string>
 </resources>

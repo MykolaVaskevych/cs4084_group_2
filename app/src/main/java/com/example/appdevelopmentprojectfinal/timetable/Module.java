@@ -1,6 +1,15 @@
 package com.example.appdevelopmentprojectfinal.timetable;
 
+import static androidx.core.content.ContentProviderCompat.requireContext;
+
+import android.util.Log;
+import android.widget.Toast;
+
 import androidx.annotation.NonNull;
+
+import com.example.appdevelopmentprojectfinal.utils.JsonUtil;
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,6 +20,7 @@ public class Module {
     private String lecturer;
 
     private boolean show;
+    private String documentId;
 
     private String type;
 
@@ -32,7 +42,6 @@ public class Module {
         this.alternativeSlots = new ArrayList<>();
     }
 
-    // Getters
     public String getCode() { return code; }
     public String getName() { return name; }
     public boolean isShow() {
@@ -63,8 +72,14 @@ public class Module {
         this.alternativeSlots = alternativeSlots;
     }
 
-    // This is used in toString() method
     String getLecturer() { return lecturer; }
+
+    public String getDocumentId() {
+        return documentId;
+    }
+    public void setDocumentId(String documentId) {
+        this.documentId = documentId;
+    }
 
     @Override
     public String toString() {
