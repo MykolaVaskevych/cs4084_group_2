@@ -34,7 +34,12 @@ public class ModuleManagementAdapter extends RecyclerView.Adapter<ModuleManageme
             Color.parseColor("#C8E6C9"), // Light Green
             Color.parseColor("#BBDEFB"), // Light Blue
             Color.parseColor("#FFE0B2"), // Light Orange
-            Color.parseColor("#E1BEE7")  // Light Purple
+            Color.parseColor("#E1BEE7"),  // Light Purple
+            Color.parseColor("#F8BBD0"), // Light Pink
+            Color.parseColor("#D7CCC8"), // Light Brown
+            Color.parseColor("#CFD8DC"), // Light Gray
+            Color.parseColor("#B2EBF2"), // Light Cyan
+            Color.parseColor("#B3E5FC")  // Lighter Blue
     };
 
     // Interface for visibility change callbacks
@@ -142,7 +147,7 @@ public class ModuleManagementAdapter extends RecyclerView.Adapter<ModuleManageme
         holder.moduleSchedule.setText(moduleGroup.getSchedulesString());
 
         // card color
-        int colorIndex = Math.abs(module.getCode().hashCode()) % MODULE_COLORS.length;
+        int colorIndex = (Integer.parseInt(module.getCode().replaceAll("[^0-9]", "")) % 100) % MODULE_COLORS.length;
         holder.cardView.setCardBackgroundColor(MODULE_COLORS[colorIndex]);
 
         JsonUtil jsonUtil = new JsonUtil();

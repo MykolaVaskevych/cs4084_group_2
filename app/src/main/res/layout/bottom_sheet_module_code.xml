@@ -78,18 +78,22 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="@string/enable_notifications"
-            android:textSize="16sp" />
+            android:textSize="16sp"
+            android:visibility="gone"
+            />
 
         <androidx.appcompat.widget.SwitchCompat
             android:id="@+id/notification_toggle"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            />
     </LinearLayout>
     <Button
         android:id="@+id/delete_module_button"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="6dp"
         android:backgroundTint="#F44444"
         android:text="@string/delete_module"
         android:textColor="#FFFFFF" />
