@@ -2,12 +2,24 @@ package com.example.appdevelopmentprojectfinal.calendar;
 
 import android.app.DatePickerDialog;
 import android.app.TimePickerDialog;
+import android.content.DialogInterface;
+import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.TextView;
+import android.widget.Toast;
 import android.graphics.Color;
 import android.widget.Toast;
 import android.widget.RadioGroup;
@@ -21,9 +33,11 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.core.view.MenuHost;
+import androidx.core.view.MenuProvider;
+import androidx.lifecycle.Lifecycle;
 
 import com.example.appdevelopmentprojectfinal.R;
-import com.example.appdevelopmentprojectfinal.utils.DataManager;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.datepicker.MaterialDatePicker;
 import com.google.android.material.timepicker.MaterialTimePicker;
@@ -37,9 +51,12 @@ import java.text.SimpleDateFormat;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.Collections;
+import java.util.UUID;
 
 public class CalendarFragment extends Fragment implements EventAdapter.OnEventClickListener {
     private static final String TAG = "TimetableApp:CalendarFragment";
+    private static final String PREF_NAME = "CalendarPrefs";
+    private static final String PREF_USER_ID = "userId";
 
     private TextView textViewCalendarTitle;
     private CustomCalendarView customCalendarView;
@@ -59,6 +76,12 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
     
     // Selected date (milliseconds since epoch)
     private long selectedDate;
+    
+    // User ID
+    private String userId;
+    
+    // Current loaded events list
+    private List<Event> currentEvents = new ArrayList<>();
     
     public CalendarFragment() {
         // Required empty public constructor
@@ -109,7 +132,40 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
         // Update event markers on calendar
         updateCalendarEvents();
         
+        // 获取或生成用户ID
+        initializeUserId();
+        
+        // 设置菜单
+        setupMenu();
+        
         return view;
+    }
+    
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+    }
+    
+    private void setupMenu() {
+        MenuHost menuHost = requireActivity();
+        menuHost.addMenuProvider(new MenuProvider() {
+            @Override
+            public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
+                menuInflater.inflate(R.menu.calendar_menu, menu);
+            }
+            
+            @Override
+            public boolean onMenuItemSelected(@NonNull MenuItem menuItem) {
+                int id = menuItem.getItemId();
+                
+                if (id == R.id.action_sync) {
+                    syncEventsToFirestore();
+                    return true;
+                }
+                
+                return false;
+            }
+        }, getViewLifecycleOwner(), Lifecycle.State.RESUMED);
     }
     
     private void setupRecyclerView() {
@@ -117,12 +173,12 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
         eventAdapter = new EventAdapter(getContext(), new ArrayList<Event>());
         eventAdapter.setOnEventClickListener(this);
         
-        // Add todo completion listener
+        // Add Todo completion listener
         eventAdapter.setOnTodoCompletedListener((event, isCompleted, position) -> {
-            // Update completed status
+            // Update completion status
             event.setCompleted(isCompleted);
             
-            // Save to Firebase
+            // Save to Firestore
             saveEventToFirebase(event);
         });
         
@@ -305,15 +361,17 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
     }
     
     private void saveEventToFirebase(Event event) {
-        // Use CalendarHelper instead of direct DataManager call
+        // Ensure event has user ID
+        if (event.getUserId() == null || event.getUserId().isEmpty()) {
+            event.setUserId(userId);
+        }
+        
+        // Save to local storage and Firestore
         CalendarHelper.saveEvent(requireContext(), event, new CalendarHelper.OnEventOperationListener() {
             @Override
             public void onSuccess() {
                 // Update event markers on calendar
-                Calendar calendar = getCalendarFromDate(event.getDate());
-                int type = event.getType() == Event.TYPE_EVENT ? 
-                    CustomCalendarView.TYPE_EVENT : CustomCalendarView.TYPE_TODO;
-                customCalendarView.addEvent(calendar, type);
+                updateCalendarEvents();
                 
                 // Refresh display
                 loadItems();
@@ -322,7 +380,7 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
             @Override
             public void onError(String errorMessage) {
                 if (getContext() != null) {
-                    Toast.makeText(getContext(), "Error saving event: " + errorMessage, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getContext(), "Failed to save event: " + errorMessage, Toast.LENGTH_SHORT).show();
                 }
             }
         });
@@ -367,13 +425,13 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
     
     private void loadItems() {
         StringBuilder headerBuilder = new StringBuilder();
-        List<Event> allEvents = DataManager.getInstance().getAllEvents();
+        
+        // Filter events based on current tab
         List<Event> filteredEvents = new ArrayList<>();
         
-        // Filter events based on the selected tab and date
-        for (Event event : allEvents) {
-            // Check if event is on the selected date for Todo and Events tabs
-            boolean isOnSelectedDate = isSameDay(event.getDate(), new Date(selectedDate));
+        for (Event event : currentEvents) {
+            // Check if event is on selected date (for Todo and Events tabs)
+            boolean isOnSelectedDate = CalendarHelper.isSameDay(event.getDate(), new Date(selectedDate));
             
             if (currentTab == 0 && event.isTodo() && (isOnSelectedDate || currentTab == 2)) {
                 filteredEvents.add(event);
@@ -384,28 +442,28 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
             }
         }
         
-        // If showing "All", sort events by time remaining (closest to expiration first)
+        // If showing "All", sort by time (closest deadline first)
         if (currentTab == 2) {
             Collections.sort(filteredEvents, (event1, event2) -> {
-                // Special case: if either event is completed, put completed ones at the end
+                // Special case: if both events are todos, completed ones go last
                 if (event1.isTodo() && event2.isTodo()) {
                     if (event1.isCompleted() && !event2.isCompleted()) {
-                        return 1; // event1 (completed) goes after event2 (not completed)
+                        return 1; // event1 (completed) goes after event2 (incomplete)
                     }
                     if (!event1.isCompleted() && event2.isCompleted()) {
-                        return -1; // event1 (not completed) goes before event2 (completed)
+                        return -1; // event1 (incomplete) goes before event2 (completed)
                     }
                     if (event1.isCompleted() && event2.isCompleted()) {
-                        return 0; // Both completed, order doesn't matter
+                        return 0; // both completed, order doesn't matter
                     }
                 }
                 
-                // For non-completed events or regular events, sort by date
+                // For incomplete events or regular events, sort by date
                 return event1.getDate().compareTo(event2.getDate());
             });
         }
         
-        // Update adapter with filtered events
+        // Update events on adapter
         eventAdapter.updateEvents(filteredEvents);
         
         // Build header text
@@ -421,7 +479,7 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
                 break;
         }
         
-        // If not showing "All", append the date in a more compact format
+        // If not showing "All", append date in compact format
         if (currentTab != 2) {
             java.util.Calendar calendar = java.util.Calendar.getInstance();
             calendar.setTimeInMillis(selectedDate);
@@ -489,10 +547,12 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
     }
     
     private void deleteEventFromFirebase(Event event) {
-        // Use CalendarHelper instead of direct DataManager call
         CalendarHelper.deleteEvent(requireContext(), event, new CalendarHelper.OnEventOperationListener() {
             @Override
             public void onSuccess() {
+                // Remove event from current list
+                currentEvents.remove(event);
+                
                 // Update event markers on calendar
                 updateCalendarEvents();
                 
@@ -503,7 +563,7 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
             @Override
             public void onError(String errorMessage) {
                 if (getContext() != null) {
-                    Toast.makeText(getContext(), "Error deleting event: " + errorMessage, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getContext(), "Failed to delete event: " + errorMessage, Toast.LENGTH_SHORT).show();
                 }
             }
         });
@@ -653,15 +713,14 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
     }
     
     /**
-     * Updates all event markers on the calendar
+     * Update all event markers on calendar
      */
     private void updateCalendarEvents() {
         // Clear all events first
         customCalendarView.clearEvents();
         
         // Add markers for all events
-        List<Event> allEvents = DataManager.getInstance().getAllEvents();
-        for (Event event : allEvents) {
+        for (Event event : currentEvents) {
             Calendar calendar = getCalendarFromDate(event.getDate());
             if (event.getType() == Event.TYPE_EVENT) {
                 customCalendarView.addEvent(calendar, CustomCalendarView.TYPE_EVENT);
@@ -680,17 +739,66 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
         return calendar;
     }
     
+    /**
+     * Get or generate a persistent user ID
+     */
+    private void initializeUserId() {
+        SharedPreferences prefs = requireActivity().getSharedPreferences(PREF_NAME, 0);
+        userId = prefs.getString(PREF_USER_ID, null);
+        
+        if (userId == null) {
+            // No stored user ID, generate a new one
+            userId = UUID.randomUUID().toString();
+            
+            // Store user ID for future use
+            SharedPreferences.Editor editor = prefs.edit();
+            editor.putString(PREF_USER_ID, userId);
+            editor.apply();
+        }
+        
+        Log.d(TAG, "Using user ID: " + userId);
+    }
+    
     @Override
     public void onResume() {
         super.onResume();
         
-        // Load events from both local storage and Firebase
-        CalendarHelper.loadAllEvents(requireContext());
+        // Load events from local storage and Firestore
+        CalendarHelper.loadAllEvents(requireContext(), userId, new CalendarHelper.OnEventsLoadedListener() {
+            @Override
+            public void onEventsLoaded(List<Event> events) {
+                // Save current events list
+                currentEvents = events;
+                
+                // Update calendar display
+                updateCalendarEvents();
+                
+                // Load events list
+                loadItems();
+            }
+        });
+    }
+    
+    /**
+     * Sync local events to Firestore
+     */
+    private void syncEventsToFirestore() {
+        Toast.makeText(requireContext(), "Starting sync...", Toast.LENGTH_SHORT).show();
         
-        // Update calendar display
-        updateCalendarEvents();
-        
-        // Load event list
-        loadItems();
+        CalendarHelper.syncLocalEventsToFirestore(requireContext(), userId, new CalendarHelper.OnSyncCompletedListener() {
+            @Override
+            public void onSyncCompleted(int syncedCount, int failedCount) {
+                if (getContext() == null) return;
+                
+                if (failedCount == 0) {
+                    Toast.makeText(requireContext(), "Sync completed: " + syncedCount + " events synced", Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(requireContext(), "Sync completed: " + syncedCount + " succeeded, " + failedCount + " failed", Toast.LENGTH_SHORT).show();
+                }
+                
+                // Reload events to refresh display
+                onResume();
+            }
+        });
     }
 } 
