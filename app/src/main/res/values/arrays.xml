@@ -12,8 +12,6 @@
         <item>Wednesday</item>
         <item>Thursday</item>
         <item>Friday</item>
-        <item>Saturday</item>
-        <item>Sunday</item>
     </string-array>
 
     <string-array name="start_time_slots">
