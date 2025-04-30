@@ -97,4 +97,11 @@
         android:backgroundTint="#F44444"
         android:text="@string/delete_module"
         android:textColor="#FFFFFF" />
+    <Button
+        android:id="@+id/btn_view_alternatives"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="View Alternative Time Slots"
+        android:visibility="gone" />
 </LinearLayout>

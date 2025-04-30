@@ -444,7 +444,7 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
     private void SaveModuleDetails(Module module) {
         FirebaseFirestore database = FirebaseFirestore.getInstance();
         database.collection("modules")
-                .document() // creates a new document reference with a random ID
+                .document()
                 .set(module)
                 .addOnSuccessListener(aVoid -> {
                     Toast.makeText(requireContext(), "Timetable data saved", Toast.LENGTH_SHORT).show();
@@ -650,8 +650,7 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                     emptyCell.setBackgroundColor(Color.LTGRAY);
                     row.addView(emptyCell);
                 } else {
-                    // TODO: Handle multiple modules in the same time slot properly
-                    ModuleSchedule schedule = schedulesForSlot.get(0); // Just take the first one if multiple
+                    ModuleSchedule schedule = schedulesForSlot.get(0);
                     Module module = schedule.getModule();
 
                     View moduleView = inflater.inflate(R.layout.item_timetable_module, null);
@@ -659,6 +658,13 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                     TextView codeText = moduleView.findViewById(R.id.module_code);
                     TextView nameText = moduleView.findViewById(R.id.module_name);
                     TextView locationText = moduleView.findViewById(R.id.module_location);
+
+                    if (module.getAlternativeSlots() != null && !module.getAlternativeSlots().isEmpty()) {
+                        codeText.setText(module.getCode() + " *");
+                        codeText.setTextColor(Color.BLUE);
+                    } else {
+                        codeText.setText(module.getCode());
+                    }
 
                     codeText.setText(module.getCode());
                     nameText.setText(module.getName());
@@ -701,10 +707,10 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
         TextView moduleType = bottomSheetView.findViewById(R.id.module_type);
 
         Button deleteModuleButton = bottomSheetView.findViewById(R.id.delete_module_button);
-
         View hideShowButton = bottomSheetView.findViewById(R.id.hide_show_button);
         hideShowButton.setVisibility(View.GONE);
 
+        Button viewAlternativesButton = bottomSheetView.findViewById(R.id.btn_view_alternatives);
         Module module = schedule.getModule();
         TimeSlot timeSlot = schedule.getTimeSlot();
         moduleCode.setText(module.getCode());
@@ -715,6 +721,13 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
         moduleStartTime.setText(timeSlot.getStartTime());
         moduleEndTime.setText(timeSlot.getEndTime());
         moduleType.setText(module.getType());
+
+        if (module.getAlternativeSlots() != null && !module.getAlternativeSlots().isEmpty()) {
+            viewAlternativesButton.setVisibility(View.VISIBLE);
+            viewAlternativesButton.setOnClickListener(v -> {
+                showAlternativeSlots(module, schedule.getTimeSlot(), bottomSheetDialog);
+            });
+        }
 
         deleteModuleButton.setOnClickListener(v -> {
             new AlertDialog.Builder(requireContext())
@@ -732,6 +745,109 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
         bottomSheetDialog.show();
     }
 
+    private void showAlternativeSlots(Module module, TimeSlot currentSlot, BottomSheetDialog parentDialog) {
+        parentDialog.dismiss();
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
+        builder.setTitle("Alternative Time Slots");
+
+        List<TimeSlot> alternatives = module.getAlternativeSlots();
+        CharSequence[] items = new CharSequence[alternatives.size()];
+        for (int i = 0; i < alternatives.size(); i++) {
+            TimeSlot alt = alternatives.get(i);
+            items[i] = alt.getDay() + " " + alt.getStartTime() + "-" + alt.getEndTime() + " (" + alt.getLocation() + ")";
+        }
+
+        builder.setItems(items, (dialog, which) -> {
+            TimeSlot selectedAlt = alternatives.get(which);
+            new AlertDialog.Builder(requireContext())
+                    .setTitle("Switch Time Slot")
+                    .setMessage("Switch from " + currentSlot.getDay() + " " + currentSlot.getStartTime() +
+                            " to " + selectedAlt.getDay() + " " + selectedAlt.getStartTime() + "?")
+                    .setPositiveButton("Switch", (confirmDialog, confirmWhich) -> {
+                        switchTimeSlot(module, currentSlot, selectedAlt);
+                    })
+                    .setNegativeButton("Cancel", null)
+                    .show();
+        });
+
+        builder.setNegativeButton("Cancel", null);
+        builder.show();
+    }
+
+    private void switchTimeSlot(Module module, TimeSlot currentSlot, TimeSlot newSlot) {
+        FirebaseFirestore database = FirebaseFirestore.getInstance();
+        database.collection("modules")
+                .document(module.getDocumentId())
+                .get()
+                .addOnSuccessListener(documentSnapshot -> {
+                    Module updatedModule = documentSnapshot.toObject(Module.class);
+                    if (updatedModule != null) {
+                        List<TimeSlot> timeSlots = updatedModule.getTimeSlotList();
+                        boolean slotFound = false;
+
+                        for (int i = 0; i < timeSlots.size(); i++) {
+                            TimeSlot slot = timeSlots.get(i);
+                            if (slot.getDay().equals(currentSlot.getDay()) &&
+                                    slot.getStartTime().equals(currentSlot.getStartTime()) &&
+                                    slot.getEndTime().equals(currentSlot.getEndTime())) {
+                                timeSlots.set(i, newSlot);
+                                slotFound = true;
+                                break;
+                            }
+                        }
+
+                        if (slotFound) {
+                            updatedModule.setTimeSlotList(timeSlots);
+
+                            List<TimeSlot> alternativeSlots = updatedModule.getAlternativeSlots();
+                            if (alternativeSlots == null) {
+                                alternativeSlots = new ArrayList<>();
+                            }
+
+                            boolean oldSlotExists = false;
+                            for (TimeSlot alt : alternativeSlots) {
+                                if (alt.getDay().equals(currentSlot.getDay()) &&
+                                        alt.getStartTime().equals(currentSlot.getStartTime()) &&
+                                        alt.getEndTime().equals(currentSlot.getEndTime())) {
+                                    oldSlotExists = true;
+                                    break;
+                                }
+                            }
+
+                            if (!oldSlotExists) {
+                                alternativeSlots.add(currentSlot);
+                            }
+
+                            for (int i = 0; i < alternativeSlots.size(); i++) {
+                                TimeSlot alt = alternativeSlots.get(i);
+                                if (alt.getDay().equals(newSlot.getDay()) &&
+                                        alt.getStartTime().equals(newSlot.getStartTime()) &&
+                                        alt.getEndTime().equals(newSlot.getEndTime())) {
+                                    alternativeSlots.remove(i);
+                                    break;
+                                }
+                            }
+
+                            updatedModule.setAlternativeSlots(alternativeSlots);
+
+                            database.collection("modules")
+                                    .document(module.getDocumentId())
+                                    .set(updatedModule)
+                                    .addOnSuccessListener(aVoid -> {
+                                        Toast.makeText(requireContext(), "Time slot has been switched successfully", Toast.LENGTH_SHORT).show();
+                                        LoadModuleDetails();
+                                    })
+                                    .addOnFailureListener(e -> {
+                                        Toast.makeText(requireContext(), "Could not switch time slot: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                                    });
+                        }
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    Toast.makeText(requireContext(), "Error loading module: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                });
+    }
     private void deleteModule(Module module) {
         FirebaseFirestore database = FirebaseFirestore.getInstance();
 
@@ -744,12 +860,12 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
 
                         if (module.getDocumentId() != null && !module.getDocumentId().isEmpty()) {
                             documentId = module.getDocumentId();
-                        } else {
+                            } else {
                             DocumentSnapshot document = queryDocumentSnapshots.getDocuments().get(0);
                             documentId = document.getId();
-                        }
+                            }
 
-                        database.collection("modules")
+                                 database.collection("modules")
                                 .document(documentId)
                                 .delete()
                                 .addOnSuccessListener(aVoid -> {
@@ -758,7 +874,7 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                                             Toast.LENGTH_SHORT).show();
 
                                     LoadModuleDetails();
-                                })
+                                    })
                                 .addOnFailureListener(e -> {
                                     Toast.makeText(requireContext(),
                                             "Could not delete the module: " + e.getMessage(),
