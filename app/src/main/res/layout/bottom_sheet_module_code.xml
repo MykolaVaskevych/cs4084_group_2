@@ -104,4 +104,5 @@
         android:layout_marginTop="16dp"
         android:text="View Alternative Time Slots"
         android:visibility="gone" />
+
 </LinearLayout>

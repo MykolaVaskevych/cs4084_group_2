@@ -76,7 +76,6 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
     };
 
     public TimetableFragment() {
-        // Required empty public constructor
     }
 
     @Override
@@ -476,7 +475,7 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                                                 timeSlot,
                                                 isMovable,
                                                 module.isShow());
-
+//1
                                         moduleSchedules.add(schedule);
                                     }
                                 }
