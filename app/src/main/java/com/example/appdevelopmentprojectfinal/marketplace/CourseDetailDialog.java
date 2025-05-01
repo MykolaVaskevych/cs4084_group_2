@@ -18,10 +18,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.VideoView;
 
-import com.example.appdevelopmentprojectfinal.R;
-
-import java.io.IOException;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.Toolbar;
@@ -43,13 +39,11 @@ import java.util.Currency;
 import java.util.List;
 import java.util.Locale;
 
-// Full-screen dialog showing course details with video preview and purchase option
 public class CourseDetailDialog extends DialogFragment {
 
-    private static final String TAG = "TimetableApp:CourseDialog";
+    private static final String TAG = "CourseDetailDialog";
     private static final String ARG_COURSE_ID = "courseId";
 
-    // Allows calling fragment to know when purchase is complete
     public interface PurchaseCompletedListener {
         void onPurchaseCompleted();
     }
@@ -58,7 +52,6 @@ public class CourseDetailDialog extends DialogFragment {
     private Course course;
     private PurchaseCompletedListener purchaseCompletedListener;
 
-    // Views
     private ImageView ivCourseImage;
     private CollapsingToolbarLayout collapsingToolbar;
     private Toolbar toolbar;
@@ -72,7 +65,6 @@ public class CourseDetailDialog extends DialogFragment {
     private CardView previewContainer;
     private ImageView btnExpandPreview;
     
-    // Expanded preview views
     private CardView expandedPreviewContainer;
     private TextView tvExpandedChapterTitle;
     private TextView tvExpandedContent;
@@ -87,12 +79,13 @@ public class CourseDetailDialog extends DialogFragment {
     private RecyclerView rvRelatedCourses;
     private Button btnCancel;
     private Button btnBuy;
+    private View loadingView;
 
-    // Adapters
     private ReviewAdapter reviewAdapter;
     private RelatedCourseAdapter relatedCourseAdapter;
 
     public static CourseDetailDialog newInstance(String courseId) {
+        Log.d(TAG, "Creating new instance with courseId: " + courseId);
         CourseDetailDialog dialog = new CourseDetailDialog();
         Bundle args = new Bundle();
         args.putString(ARG_COURSE_ID, courseId);
@@ -102,17 +95,14 @@ public class CourseDetailDialog extends DialogFragment {
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
-        final String TAG = "CourseDetailDialog";
+        Log.d(TAG, "onCreate called");
         super.onCreate(savedInstanceState);
         
-        // Set full screen dialog style
         setStyle(DialogFragment.STYLE_NORMAL, R.style.Theme_AppDevelopmentProjectFinal_FullScreenDialog);
-        Log.d(TAG, "Dialog style set to full screen");
 
-        // Extract course ID from arguments
         if (getArguments() != null) {
             courseId = getArguments().getString(ARG_COURSE_ID);
-            Log.d(TAG, "Course ID extracted from arguments: " + courseId);
+            Log.d(TAG, "Retrieved courseId from arguments: " + courseId);
         } else {
             Log.w(TAG, "No arguments provided to CourseDetailDialog");
         }
@@ -122,52 +112,34 @@ public class CourseDetailDialog extends DialogFragment {
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, 
                              @Nullable Bundle savedInstanceState) {
-        final String TAG = "CourseDetailDialog";
-        Log.d(TAG, "Creating view for course detail dialog");
+        Log.d(TAG, "onCreateView called");
         return inflater.inflate(R.layout.dialog_course_detail, container, false);
     }
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
-        final String TAG = "CourseDetailDialog";
+        Log.d(TAG, "onViewCreated called");
         super.onViewCreated(view, savedInstanceState);
-        Log.d(TAG, "View created, initializing components");
 
-        // Initialize views
         initViews(view);
 
-        // Set up toolbar navigation (back button)
         toolbar.setNavigationOnClickListener(v -> {
-            Log.d(TAG, "Navigation back clicked, dismissing dialog");
+            Log.d(TAG, "Navigation button clicked, dismissing dialog");
             dismiss();
         });
 
-        // Load course data from DataManager
         if (courseId == null || courseId.isEmpty()) {
-            Log.e(TAG, "Cannot load course: courseId is null or empty");
+            Log.e(TAG, "courseId is null or empty, cannot load course details");
             Toast.makeText(requireContext(), getString(R.string.course_id_missing), Toast.LENGTH_SHORT).show();
             dismiss();
             return;
         }
         
-        course = DataManager.getInstance().getCourseById(courseId);
-        if (course != null) {
-            Log.i(TAG, "Course loaded successfully: " + course.getName());
-            displayCourseDetails();
-        } else {
-            Log.e(TAG, "Course not found for ID: " + courseId);
-            Toast.makeText(requireContext(), getString(R.string.course_not_found), Toast.LENGTH_SHORT).show();
-            dismiss();
-            return;
-        }
-
-        // Set up button listeners for actions
-        setupButtons();
-        
-        Log.i(TAG, "Course detail dialog initialization complete");
+        loadCourseDetails();
     }
 
     private void initViews(View view) {
+        Log.d(TAG, "Initializing views");
         ivCourseImage = view.findViewById(R.id.ivCourseImage);
         collapsingToolbar = view.findViewById(R.id.collapsingToolbar);
         toolbar = view.findViewById(R.id.toolbar);
@@ -177,13 +149,11 @@ public class CourseDetailDialog extends DialogFragment {
         tvRating = view.findViewById(R.id.tvRating);
         tvDescription = view.findViewById(R.id.tvDescription);
         
-        // Collapsed preview views
         tvPreviewTitle = view.findViewById(R.id.tvPreviewTitle);
         tvPreviewContent = view.findViewById(R.id.tvPreviewContent);
         previewContainer = view.findViewById(R.id.previewContainer);
         btnExpandPreview = view.findViewById(R.id.btnExpandPreview);
         
-        // Expanded preview views
         expandedPreviewContainer = view.findViewById(R.id.expandedPreviewContainer);
         tvExpandedChapterTitle = view.findViewById(R.id.tvExpandedChapterTitle);
         tvExpandedContent = view.findViewById(R.id.tvExpandedContent);
@@ -198,64 +168,66 @@ public class CourseDetailDialog extends DialogFragment {
         rvRelatedCourses = view.findViewById(R.id.rvRelatedCourses);
         btnCancel = view.findViewById(R.id.btnCancel);
         btnBuy = view.findViewById(R.id.btnBuy);
+        loadingView = view.findViewById(R.id.loadingView);
         
-        // Set up preview expansion/collapse listeners
         setupPreviewExpansion();
+        Log.d(TAG, "Views initialized successfully");
+    }
+    
+    private void loadCourseDetails() {
+        Log.i(TAG, "Loading course details for courseId: " + courseId);
+        showLoading(true);
+        
+        MarketplaceFirestoreManager.getInstance().loadCourseById(courseId, new MarketplaceFirestoreManager.OnCourseLoadedListener() {
+            @Override
+            public void onCourseLoaded(Course loadedCourse) {
+                Log.i(TAG, "Course loaded successfully: " + loadedCourse.getName());
+                course = loadedCourse;
+                displayCourseDetails();
+                setupButtons();
+                showLoading(false);
+            }
+
+            @Override
+            public void onError(String errorMessage) {
+                Log.e(TAG, "Error loading course: " + errorMessage);
+                Toast.makeText(requireContext(), getString(R.string.course_not_found), Toast.LENGTH_SHORT).show();
+                showLoading(false);
+                dismiss();
+            }
+        });
+    }
+    
+    private void showLoading(boolean isLoading) {
+        Log.v(TAG, "Loading state changed: " + isLoading);
+        if (isLoading) {
+            loadingView.setVisibility(View.VISIBLE);
+        } else {
+            loadingView.setVisibility(View.GONE);
+        }
     }
 
     private void displayCourseDetails() {
-        final String TAG = "CourseDetailDialog";
+        Log.i(TAG, "Displaying details for course: " + course.getName());
         
-        Log.d(TAG, "Displaying details for course: " + course.getId() + " - " + course.getName());
-        
-        // Set course title in the collapsing toolbar
         collapsingToolbar.setTitle(course.getName());
-
-        // Set course image - use color based on module code for consistent display
         setCourseImage();
-
-        // Set module info
         setModuleInfo();
-
-        // Set author
         tvAuthor.setText(getString(R.string.by_author, course.getAuthor()));
-        Log.d(TAG, "Author: " + course.getAuthor());
-
-        // Set rating
         setRatingInfo();
-
-        // Set description
         tvDescription.setText(course.getDescription());
-        Log.d(TAG, "Description set: " + 
-              (course.getDescription().length() > 50 ? 
-               course.getDescription().substring(0, 50) + "..." : 
-               course.getDescription()));
-
-        // Set preview content
         setPreviewContent();
-
-        // Set reviews
         setReviewsSection();
-
-        // Set related courses
-        setRelatedCourses();
-
-        // Set buy button text and state
+        loadRelatedCourses();
         configureBuyButton();
         
-        Log.i(TAG, "Course detail display completed");
+        Log.d(TAG, "Course details displayed successfully");
     }
     
     private void setCourseImage() {
-        final String TAG = "CourseDetailDialog";
-        
-        // Get a consistent color based on the course ID - this ensures the same course
-        // always gets the same color for better recognition
         int colorCode;
         if (course.getRelatedModule() != null) {
-            // Generate color based on module code hash for consistency
             int hash = course.getRelatedModule().hashCode();
-            // Use limited palette of nice colors
             int[] colors = {
                 0xFF4CAF50, // Green
                 0xFF2196F3, // Blue
@@ -264,47 +236,38 @@ public class CourseDetailDialog extends DialogFragment {
                 0xFFE91E63  // Pink
             };
             colorCode = colors[Math.abs(hash) % colors.length];
+            Log.v(TAG, "Setting course image color based on module hash: " + Integer.toHexString(colorCode));
         } else {
-            // Default color if no module code
             colorCode = 0xFF4CAF50; // Green
+            Log.v(TAG, "Using default green color for course image");
         }
         
-        // Set background color
         ivCourseImage.setBackgroundColor(colorCode);
-        
-        Log.d(TAG, "Set course image background color: #" + 
-              Integer.toHexString(colorCode).substring(2).toUpperCase());
     }
     
     private void setModuleInfo() {
-        final String TAG = "CourseDetailDialog";
-        
         Module module = DataManager.getInstance().getModuleByCode(course.getRelatedModule());
         if (module != null) {
             String moduleInfo = String.format("%s: %s", module.getCode(), module.getName());
+            Log.v(TAG, "Setting module info: " + moduleInfo);
             tvModuleInfo.setText(moduleInfo);
-            Log.d(TAG, "Module info set: " + moduleInfo);
         } else {
+            Log.v(TAG, "Module not found, using module code only: " + course.getRelatedModule());
             tvModuleInfo.setText(course.getRelatedModule());
-            Log.w(TAG, "Module not found for code: " + course.getRelatedModule());
         }
     }
     
     private void setRatingInfo() {
-        final String TAG = "CourseDetailDialog";
-        
         double averageRating = course.getAverageRating();
         int numReviews = course.getReviews() != null ? course.getReviews().size() : 0;
         
+        Log.v(TAG, String.format("Setting rating info: %.1f stars from %d reviews", averageRating, numReviews));
         ratingBar.setRating((float) averageRating);
         tvRating.setText(getString(R.string.rating_count, averageRating, numReviews));
-        
-        Log.d(TAG, String.format("Rating: %.1f from %d reviews", averageRating, numReviews));
     }
     
     private void setPreviewContent() {
-        final String TAG = "CourseDetailDialog";
-        
+        Log.d(TAG, "Setting up preview content");
         if (course.getContent() == null || course.getContent().getPreview() == null) {
             Log.w(TAG, "No preview content available for this course");
             previewContainer.setVisibility(View.GONE);
@@ -313,54 +276,55 @@ public class CourseDetailDialog extends DialogFragment {
         
         Course.Preview preview = course.getContent().getPreview();
         if (preview.getTitle() == null || preview.getTitle().isEmpty()) {
-            Log.w(TAG, "Preview has no title");
+            Log.v(TAG, "Using default preview title");
             tvPreviewTitle.setText(getString(R.string.preview));
         } else {
+            Log.v(TAG, "Using provided preview title: " + preview.getTitle());
             tvPreviewTitle.setText(preview.getTitle());
-            Log.d(TAG, "Preview title: " + preview.getTitle());
         }
         
         if (preview.getItems() == null || preview.getItems().isEmpty()) {
-            Log.w(TAG, "Preview has no content items");
+            Log.w(TAG, "Preview has no items, hiding preview section");
             previewContainer.setVisibility(View.GONE);
             return;
         }
         
-        // Build a preview description from all text items
         StringBuilder previewText = new StringBuilder();
         int textItemsFound = 0;
+        int videoCount = 0;
+        int imageCount = 0;
         
-        // First pass - collect all text content
+        // Count content types and gather text content
         for (Course.ContentItem item : preview.getItems()) {
-            if ("text".equals(item.getType()) && item.getContent() != null) {
+            String itemType = item.getType();
+            if (itemType == null) {
+                Log.w(TAG, "Found preview item with null type");
+                continue;
+            }
+            
+            Log.v(TAG, "Processing preview item of type: " + itemType);
+            
+            if ("text".equals(itemType) && item.getContent() != null) {
                 if (textItemsFound > 0) {
                     previewText.append("\n\n");
                 }
                 previewText.append(item.getContent());
                 textItemsFound++;
                 
-                Log.d(TAG, "Added preview text item: " + 
-                     (item.getContent().length() > 50 ? 
-                      item.getContent().substring(0, 50) + "..." : 
-                      item.getContent()));
+                Log.v(TAG, "Added text item #" + textItemsFound);
+            } else if ("video".equals(itemType)) {
+                videoCount++;
+                Log.v(TAG, "Found video item #" + videoCount);
+            } else if ("image".equals(itemType)) {
+                imageCount++;
+                Log.v(TAG, "Found image item #" + imageCount);
             }
         }
         
-        // If no text items, mention other content types found
+        Log.d(TAG, String.format("Preview content summary: %d text items, %d videos, %d images", 
+                textItemsFound, videoCount, imageCount));
+        
         if (textItemsFound == 0) {
-            // Count content types
-            int videoCount = 0;
-            int imageCount = 0;
-            
-            for (Course.ContentItem item : preview.getItems()) {
-                if ("video".equals(item.getType())) {
-                    videoCount++;
-                } else if ("image".equals(item.getType())) {
-                    imageCount++;
-                }
-            }
-            
-            // Build preview description based on available content
             if (videoCount > 0 || imageCount > 0) {
                 StringBuilder contentDesc = new StringBuilder(getString(R.string.preview_contains));
                 
@@ -384,27 +348,27 @@ public class CourseDetailDialog extends DialogFragment {
                     contentDesc.append(imageText);
                 }
                 
+                Log.v(TAG, "Using media count description: " + contentDesc);
                 previewText.append(contentDesc);
-                Log.d(TAG, "No text content found in preview, showing content summary");
             } else {
-                // No recognizable content
-                Log.w(TAG, "No usable content found in preview items");
+                Log.w(TAG, "No usable content found in preview");
                 previewText.append(getString(R.string.preview_tap_to_see));
             }
         }
         
-        // Set the preview text
         if (previewText.length() > 0) {
+            Log.v(TAG, "Setting preview text with " + previewText.length() + " characters");
             tvPreviewContent.setText(previewText.toString());
         } else {
-            // Fallback if nothing could be built
+            Log.v(TAG, "Using default preview text");
             tvPreviewContent.setText(getString(R.string.preview_tap_to_see));
         }
+        
+        previewContainer.setVisibility(View.VISIBLE);
     }
     
     private void setReviewsSection() {
-        final String TAG = "CourseDetailDialog";
-        
+        Log.d(TAG, "Setting up reviews section");
         if (course.getReviews() == null || course.getReviews().isEmpty()) {
             Log.w(TAG, "No reviews available for this course");
             rvReviews.setVisibility(View.GONE);
@@ -412,50 +376,73 @@ public class CourseDetailDialog extends DialogFragment {
             return;
         }
         
+        Log.i(TAG, "Displaying " + course.getReviews().size() + " reviews");
         reviewAdapter = new ReviewAdapter(course.getReviews());
         rvReviews.setAdapter(reviewAdapter);
         tvNoReviews.setVisibility(View.GONE);
-        
-        Log.d(TAG, "Set up " + course.getReviews().size() + " reviews");
     }
     
-    private void setRelatedCourses() {
-        final String TAG = "CourseDetailDialog";
+    private void loadRelatedCourses() {
+        Log.i(TAG, "Loading related courses for module: " + course.getRelatedModule());
+        showRelatedCoursesLoading(true);
         
-        List<Course> relatedCourses = DataManager.getInstance().getRelatedCourses(course);
-        if (relatedCourses.isEmpty()) {
-            Log.w(TAG, "No related courses found");
-            rvRelatedCourses.setVisibility(View.GONE);
-            return;
-        }
-        
-        relatedCourseAdapter = new RelatedCourseAdapter(relatedCourses, this::showRelatedCourseDetail);
-        rvRelatedCourses.setAdapter(relatedCourseAdapter);
-        
-        Log.d(TAG, "Set up " + relatedCourses.size() + " related courses");
+        MarketplaceFirestoreManager.getInstance().loadCoursesByModule(course.getRelatedModule(), new MarketplaceFirestoreManager.OnCoursesLoadedListener() {
+            @Override
+            public void onCoursesLoaded(List<Course> courses) {
+                Log.d(TAG, "Loaded " + courses.size() + " courses for related module");
+                List<Course> relatedCourses = new ArrayList<>();
+                for (Course relatedCourse : courses) {
+                    if (!relatedCourse.getId().equals(course.getId())) {
+                        relatedCourses.add(relatedCourse);
+                        Log.v(TAG, "Added related course: " + relatedCourse.getName());
+                    }
+                }
+                
+                if (relatedCourses.isEmpty()) {
+                    Log.w(TAG, "No related courses found after filtering");
+                    rvRelatedCourses.setVisibility(View.GONE);
+                } else {
+                    Log.i(TAG, "Displaying " + relatedCourses.size() + " related courses");
+                    relatedCourseAdapter = new RelatedCourseAdapter(relatedCourses, CourseDetailDialog.this::showRelatedCourseDetail);
+                    rvRelatedCourses.setAdapter(relatedCourseAdapter);
+                    rvRelatedCourses.setVisibility(View.VISIBLE);
+                }
+                
+                showRelatedCoursesLoading(false);
+            }
+
+            @Override
+            public void onError(String errorMessage) {
+                Log.e(TAG, "Error loading related courses: " + errorMessage);
+                rvRelatedCourses.setVisibility(View.GONE);
+                showRelatedCoursesLoading(false);
+            }
+        });
+    }
+    
+    private void showRelatedCoursesLoading(boolean isLoading) {
+        Log.v(TAG, "Related courses loading state: " + isLoading);
+        // Could add a specific loading indicator for related courses if needed
     }
     
     private void configureBuyButton() {
-        final String TAG = "CourseDetailDialog";
-        
-        // Format currency for display
+        Log.d(TAG, "Configuring buy button");
         NumberFormat format = NumberFormat.getCurrencyInstance(Locale.GERMANY);
         format.setCurrency(Currency.getInstance("EUR"));
         String formattedPrice = format.format(course.getPrice());
         
-        // Set default buy button state
+        Log.v(TAG, "Setting buy button price: " + formattedPrice);
         btnBuy.setText(getString(R.string.buy_price, formattedPrice));
         btnBuy.setEnabled(true);
         
-        // Check if user already owns this course
         User currentUser = DataManager.getInstance().getCurrentUser();
         if (currentUser != null) {
             if (currentUser.ownsModule(course.getId())) {
+                Log.i(TAG, "User already owns this course, disabling buy button");
                 btnBuy.setText(getString(R.string.owned));
                 btnBuy.setEnabled(false);
-                Log.d(TAG, "User already owns this course");
             } else {
-                Log.d(TAG, "Course available for purchase at " + formattedPrice);
+                Log.v(TAG, "Course is available for purchase");
             }
         } else {
             Log.w(TAG, "Current user is null, cannot check ownership status");
@@ -463,123 +450,112 @@ public class CourseDetailDialog extends DialogFragment {
     }
 
     private void setupButtons() {
-        btnCancel.setOnClickListener(v -> dismiss());
+        Log.d(TAG, "Setting up button actions");
+        btnCancel.setOnClickListener(v -> {
+            Log.d(TAG, "Cancel button clicked, dismissing dialog");
+            dismiss();
+        });
 
         btnBuy.setOnClickListener(v -> {
+            Log.d(TAG, "Buy button clicked");
             User currentUser = DataManager.getInstance().getCurrentUser();
             if (currentUser == null) {
+                Log.e(TAG, "Cannot purchase: current user is null");
                 Toast.makeText(requireContext(), getString(R.string.user_not_found), Toast.LENGTH_SHORT).show();
                 return;
             }
 
             if (currentUser.ownsModule(course.getId())) {
+                Log.w(TAG, "User already owns course: " + course.getId());
                 Toast.makeText(requireContext(), getString(R.string.already_owned), Toast.LENGTH_SHORT).show();
                 return;
             }
 
-            // Show purchase confirmation dialog
             showPurchaseConfirmationDialog();
         });
     }
     
     private void setupPreviewExpansion() {
-        // Set up expand button click listener
+        Log.d(TAG, "Setting up preview expansion controls");
+        
         btnExpandPreview.setOnClickListener(v -> {
-            // Hide collapsed preview, show expanded preview
+            Log.d(TAG, "Expanding preview content");
             previewContainer.setVisibility(View.GONE);
             expandedPreviewContainer.setVisibility(View.VISIBLE);
-            
-            // Prepare the first chapter content from the course
             prepareExpandedPreview();
         });
         
-        // Set up collapse button click listener
         btnCollapsePreview.setOnClickListener(v -> {
-            // Hide expanded preview, show collapsed preview
+            Log.d(TAG, "Collapsing preview content");
             expandedPreviewContainer.setVisibility(View.GONE);
             previewContainer.setVisibility(View.VISIBLE);
             
-            // Stop video if playing
             if (videoView.isPlaying()) {
+                Log.v(TAG, "Stopping video playback on collapse");
                 videoView.stopPlayback();
             }
         });
         
-        // Set up play button click listener
         ivPlayButton.setOnClickListener(v -> {
+            Log.d(TAG, "Play button clicked");
             playVideo();
         });
     }
     
     private void prepareExpandedPreview() {
-        final String TAG = "CourseDetailDialog";
+        Log.d(TAG, "Preparing expanded preview content");
         
         if (course == null || course.getContent() == null || course.getContent().getChapters() == null 
                 || course.getContent().getChapters().isEmpty()) {
-            Log.w(TAG, "Cannot prepare expanded preview: course content is missing or empty");
+            Log.e(TAG, "Cannot prepare expanded preview: course content is missing");
             expandedPreviewContainer.setVisibility(View.GONE);
             return;
         }
             
-        // Get the first chapter
         Course.Chapter firstChapter = course.getContent().getChapters().get(0);
-        Log.d(TAG, "Preparing expanded preview for chapter: " + firstChapter.getTitle());
+        Log.i(TAG, "Using first chapter for preview: " + firstChapter.getTitle());
         tvExpandedChapterTitle.setText(firstChapter.getTitle());
         
-        // Set expanded content text
         StringBuilder contentBuilder = new StringBuilder();
         String videoTitle = "";
         String videoUrl = null;
         
-        // Find text and video items for the expanded content
         if (firstChapter.getItems() != null) {
-            // Log the number of content items in this chapter
-            Log.d(TAG, "Chapter has " + firstChapter.getItems().size() + " content items");
-            
+            Log.v(TAG, "Processing " + firstChapter.getItems().size() + " items in chapter");
             for (Course.ContentItem item : firstChapter.getItems()) {
-                // Process each content item based on its type
                 String itemType = item.getType();
                 if (itemType == null) {
-                    Log.w(TAG, "Skipping content item with null type");
+                    Log.w(TAG, "Skipping item with null type");
                     continue;
                 }
                 
+                Log.v(TAG, "Processing item of type: " + itemType);
                 switch (itemType) {
                     case "text":
                         if (item.getContent() != null) {
-                            Log.d(TAG, "Adding text content: " + 
-                                  (item.getContent().length() > 50 ? 
-                                   item.getContent().substring(0, 50) + "..." : 
-                                   item.getContent()));
                             contentBuilder.append(item.getContent()).append("\n\n");
+                            Log.v(TAG, "Added text content (" + item.getContent().length() + " chars)");
                         } else {
-                            Log.w(TAG, "Text content item has null content");
+                            Log.w(TAG, "Skipping text item with null content");
                         }
                         break;
                         
                     case "video":
-                        Log.d(TAG, "Found video content item");
-                        // Set video title if available
                         if (item.getTitle() != null) {
                             videoTitle = item.getTitle();
-                            Log.d(TAG, "Video title: " + videoTitle);
+                            Log.v(TAG, "Found video title: " + videoTitle);
                         }
                         
-                        // Store video URL for later use
                         if (item.getUrl() != null) {
                             videoUrl = item.getUrl();
-                            Log.d(TAG, "Video URL: " + videoUrl);
+                            Log.v(TAG, "Found video URL: " + videoUrl);
+                        } else {
+                            Log.w(TAG, "Video item has null URL");
                         }
-                        break;
-                        
-                    case "image":
-                        Log.d(TAG, "Found image content item" + 
-                             (item.getCaption() != null ? ": " + item.getCaption() : ""));
-                        // We could add image handling here if needed
                         break;
                         
                     default:
-                        Log.w(TAG, "Unknown content item type: " + itemType);
+                        Log.w(TAG, "Unhandled content item type: " + itemType);
                         break;
                 }
             }
@@ -587,282 +563,198 @@ public class CourseDetailDialog extends DialogFragment {
             Log.w(TAG, "Chapter has no content items");
         }
         
-        // Set video title
         if (!videoTitle.isEmpty()) {
+            Log.v(TAG, "Setting video title: " + videoTitle);
             tvVideoTitle.setText(videoTitle);
             tvVideoTitle.setVisibility(View.VISIBLE);
         } else {
+            Log.v(TAG, "No video title available, hiding title view");
             tvVideoTitle.setVisibility(View.GONE);
         }
         
-        // Configure video view based on whether we have a video
         if (videoUrl != null) {
-            // Show video container
+            Log.d(TAG, "Setting up video with URL: " + videoUrl);
             videoContainer.setVisibility(View.VISIBLE);
-            
-            // Set up video view behavior
             setUpVideoView(videoUrl);
         } else {
-            // No video to show
-            Log.d(TAG, "No video URL available, hiding video container");
+            Log.w(TAG, "No video URL available, hiding video container");
             videoContainer.setVisibility(View.GONE);
         }
         
-        // Set the content text if available
         if (contentBuilder.length() > 0) {
+            Log.v(TAG, "Setting expanded content text (" + contentBuilder.length() + " chars)");
             tvExpandedContent.setText(contentBuilder.toString());
             tvExpandedContent.setVisibility(View.VISIBLE);
-            Log.d(TAG, "Content text set with " + contentBuilder.length() + " characters");
         } else {
-            // If no content is available, hide the text view
+            Log.w(TAG, "No content text available, hiding content view");
             tvExpandedContent.setVisibility(View.GONE);
-            Log.w(TAG, "No content text available for chapter");
         }
         
-        Log.i(TAG, "Expanded preview prepared successfully");
+        Log.d(TAG, "Expanded preview prepared successfully");
     }
     
     private void setUpVideoView(String videoUrl) {
-        final String TAG = "CourseDetailDialog";
-        Log.d(TAG, "Setting up video view for URL: " + videoUrl);
+        Log.i(TAG, "Setting up video view for URL: " + videoUrl);
         
         try {
-            // Lookup video based on course ID and video URL
-            // This creates a mapping system between the JSON data and local resources
-            try {
-                // Step 1: Try to find the exact video based on course ID and content URL
-                String courseSpecificResource = generateResourceName(course.getId(), videoUrl);
-                Log.d(TAG, "Looking for course-specific video resource: " + courseSpecificResource);
-                
-                // Try to find this resource
-                int resourceId = findResourceId(courseSpecificResource);
-                if (resourceId != 0) {
-                    // Found the exact video for this course's content
-                    String videoPath = "android.resource://" + requireContext().getPackageName() + "/" + resourceId;
-                    videoView.setVideoURI(Uri.parse(videoPath));
-                    Log.d(TAG, "Found course-specific video: " + courseSpecificResource + " (id: " + resourceId + ")");
-                    return;
-                }
-                
-                // Step 2: Try to find generic video based on just the URL
-                String filename = getFilenameFromUrl(videoUrl);
-                if (filename != null && !filename.isEmpty()) {
-                    String genericResource = convertToResourceName(filename);
-                    Log.d(TAG, "Looking for generic video resource by filename: " + genericResource);
-                    
-                    resourceId = findResourceId(genericResource);
-                    if (resourceId != 0) {
-                        // Found generic video that matches the URL filename
-                        String videoPath = "android.resource://" + requireContext().getPackageName() + "/" + resourceId;
-                        videoView.setVideoURI(Uri.parse(videoPath));
-                        Log.d(TAG, "Found generic video by filename: " + genericResource + " (id: " + resourceId + ")");
-                        return;
-                    }
-                }
-                
-                // Step 3: Try course-specific default video
-                String courseDefaultResource = "course_" + convertToResourceName(course.getId());
-                Log.d(TAG, "Looking for course default video: " + courseDefaultResource);
-                
-                resourceId = findResourceId(courseDefaultResource);
-                if (resourceId != 0) {
-                    // Found default video for this course
-                    String videoPath = "android.resource://" + requireContext().getPackageName() + "/" + resourceId;
-                    videoView.setVideoURI(Uri.parse(videoPath));
-                    Log.d(TAG, "Found course default video: " + courseDefaultResource + " (id: " + resourceId + ")");
-                    return;
-                }
-                
-                // Step 4: Fall back to the global default video
-                Log.d(TAG, "No specific video found, using default demo video");
-                String videoPath = "android.resource://" + requireContext().getPackageName() + "/raw/course_preview_demo";
-                videoView.setVideoURI(Uri.parse(videoPath));
-                
-            } catch (Exception e) {
-                // Handle any errors in video setup process
-                Log.w(TAG, "Error looking up video resources: " + e.getMessage());
-                Log.d(TAG, "Using default demo video instead");
-                
-                // Set up the demo video (course_preview_demo.mp4 in raw folder)
-                String videoPath = "android.resource://" + requireContext().getPackageName() + "/raw/course_preview_demo";
-                videoView.setVideoURI(Uri.parse(videoPath));
-            }
+            long startTime = System.currentTimeMillis();
+            String resourcePath = findLocalVideoResourceForUrl(videoUrl);
+            Log.d(TAG, "Resolved video resource path: " + resourcePath);
             
-            // Set up completion listener to show play button when video ends
+            videoView.setVideoURI(Uri.parse(resourcePath));
+            Log.v(TAG, "Video URI set successfully");
+            
             videoView.setOnCompletionListener(mp -> {
                 Log.d(TAG, "Video playback completed");
                 ivPlayButton.setVisibility(View.VISIBLE);
             });
             
-            // Set up the remaining video listeners
             setupVideoListeners();
             
-            // Show play button initially
             ivPlayButton.setVisibility(View.VISIBLE);
-            Log.d(TAG, "Video view configured successfully");
+            long endTime = System.currentTimeMillis();
+            Log.d(TAG, "Video setup completed in " + (endTime - startTime) + "ms");
         } catch (Exception e) {
             Log.e(TAG, "Failed to set up video view: " + e.getMessage(), e);
-            // Hide video container on critical setup failure
             videoContainer.setVisibility(View.GONE);
         }
     }
     
-    /**
-     * Extract filename from a URL
-     */
+    private String findLocalVideoResourceForUrl(String videoUrl) {
+        String defaultResourcePath = "android.resource://" + requireContext().getPackageName() + "/raw/course_preview_demo";
+        Log.d(TAG, "Finding local video resource for URL: " + videoUrl);
+        
+        if (videoUrl == null || videoUrl.isEmpty()) {
+            Log.w(TAG, "Video URL is null or empty, using default resource");
+            return defaultResourcePath;
+        }
+        
+        try {
+            String filename = getFilenameFromUrl(videoUrl);
+            if (filename != null && !filename.isEmpty()) {
+                String resourceName = convertToResourceName(filename);
+                Log.v(TAG, "Looking for resource name: " + resourceName);
+                
+                int resourceId = findResourceId(resourceName);
+                
+                if (resourceId != 0) {
+                    String resourcePath = "android.resource://" + requireContext().getPackageName() + "/" + resourceId;
+                    Log.i(TAG, "Found matching resource: " + resourceName + " (id: " + resourceId + ")");
+                    return resourcePath;
+                } else {
+                    Log.w(TAG, "Resource not found: " + resourceName);
+                }
+            } else {
+                Log.w(TAG, "Could not extract filename from URL");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error finding local video resource: " + e.getMessage(), e);
+        }
+        
+        Log.d(TAG, "Using default video resource");
+        return defaultResourcePath;
+    }
+    
     private String getFilenameFromUrl(String url) {
         if (url == null || url.isEmpty()) {
             return null;
         }
         
-        // Get the part after the last slash
         int lastSlashIndex = url.lastIndexOf('/');
         if (lastSlashIndex != -1 && lastSlashIndex < url.length() - 1) {
-            return url.substring(lastSlashIndex + 1);
+            String filename = url.substring(lastSlashIndex + 1);
+            Log.v(TAG, "Extracted filename from URL: " + filename);
+            return filename;
         }
         
-        return url; // No slash found, return the whole string
+        return url;
     }
     
-    /**
-     * Convert a filename to a valid Android resource name
-     */
     private String convertToResourceName(String filename) {
         if (filename == null || filename.isEmpty()) {
-            return "course_preview_demo"; // Default fallback
+            return "course_preview_demo";
         }
         
-        // Remove extension if present
         int dotIndex = filename.lastIndexOf('.');
         if (dotIndex != -1) {
             filename = filename.substring(0, dotIndex);
         }
         
-        // Convert to lowercase and replace invalid characters with underscore
-        return filename.toLowerCase()
-                .replaceAll("[^a-z0-9_]", "_");
+        String resourceName = filename.toLowerCase().replaceAll("[^a-z0-9_]", "_");
+        Log.v(TAG, "Converted to resource name: " + resourceName);
+        return resourceName;
     }
     
-    // Better than getIdentifier with try/catch - returns 0 if not found
     private int findResourceId(String resourceName) {
         android.content.res.Resources resources = requireContext().getResources();
         String packageName = requireContext().getPackageName();
         
-        // First try to find it in the raw folder
         int resourceId = resources.getIdentifier(resourceName, "raw", packageName);
-        
-        // If not found, try in the drawable folder
-        if (resourceId == 0) {
-            resourceId = resources.getIdentifier(resourceName, "drawable", packageName);
+        if (resourceId != 0) {
+            Log.v(TAG, "Found resource in 'raw' folder: " + resourceId);
+            return resourceId;
         }
         
-        return resourceId; // Returns 0 if resource not found
-    }
-    
-    // Maps URL to valid Android resource name with course-specific prefix
-    private String generateResourceName(String courseId, String videoUrl) {
-        if (courseId == null || courseId.isEmpty() || videoUrl == null || videoUrl.isEmpty()) {
-            return "course_preview_demo"; // Default fallback
+        resourceId = resources.getIdentifier(resourceName, "drawable", packageName);
+        if (resourceId != 0) {
+            Log.v(TAG, "Found resource in 'drawable' folder: " + resourceId);
+            return resourceId;
         }
         
-        // Get the filename part of the URL
-        String filename = getFilenameFromUrl(videoUrl);
-        if (filename == null || filename.isEmpty()) {
-            return "course_" + convertToResourceName(courseId);
-        }
-        
-        // Remove extension from filename
-        String filenameWithoutExt = filename;
-        int dotIndex = filename.lastIndexOf('.');
-        if (dotIndex != -1) {
-            filenameWithoutExt = filename.substring(0, dotIndex);
-        }
-        
-        // Combine course ID and filename to create a unique resource name
-        // Format: course_[course_id]_[filename]
-        return "course_" + convertToResourceName(courseId) + "_" + 
-               convertToResourceName(filenameWithoutExt);
+        Log.v(TAG, "Resource not found in any folder: " + resourceName);
+        return 0;
     }
     
     private void playVideo() {
-        final String TAG = "CourseDetailDialog";
-        
-        // Hide play button when starting playback
+        Log.i(TAG, "Starting video playback");
         ivPlayButton.setVisibility(View.GONE);
         
         try {
-            Log.d(TAG, "Starting video playback");
+            long startTime = System.currentTimeMillis();
             
-            // Check if VideoView has been prepared
-            if (videoView.getDuration() <= 0) {
-                Log.w(TAG, "VideoView not properly prepared. Setting up listeners again.");
-                setupVideoListeners();
-            }
-            
-            // Ensure video view has focus for controls
             videoView.requestFocus();
-            // Start video - this triggers prepare followed by the onPrepared callback
             videoView.start();
             
-            Log.d(TAG, "Video playback requested");
-            
+            long endTime = System.currentTimeMillis();
+            Log.d(TAG, "Video playback started in " + (endTime - startTime) + "ms");
         } catch (Exception e) {
-            // Log unexpected errors
-            Log.e(TAG, "Unexpected error during video playback: " + e.getMessage(), e);
-            
-            // Show error message to user
+            Log.e(TAG, "Error playing video: " + e.getMessage(), e);
             Toast.makeText(requireContext(), 
                     getString(R.string.video_loading_error_message, e.getMessage()),
                     Toast.LENGTH_SHORT).show();
-            
-            // Show play button so user can try again
             ivPlayButton.setVisibility(View.VISIBLE);
         }
     }
     
-    // Handle successful video load and error conditions
     private void setupVideoListeners() {
-        final String TAG = "CourseDetailDialog";
+        Log.d(TAG, "Setting up video player listeners");
         
-        // Set up prepared listener for when the video is ready to play
         videoView.setOnPreparedListener(mp -> {
-            Log.d(TAG, "Video prepared successfully, starting playback");
-            // Configure media player
+            int width = mp.getVideoWidth();
+            int height = mp.getVideoHeight();
+            int durationMs = mp.getDuration();
+            
+            Log.i(TAG, String.format("Video prepared: %dx%d, duration: %.2fs", 
+                    width, height, durationMs/1000f));
+            
             mp.setLooping(false);
             mp.setVolume(1.0f, 1.0f);
-            
-            // Calculate video dimensions for logging
-            int videoWidth = mp.getVideoWidth();
-            int videoHeight = mp.getVideoHeight();
-            int duration = mp.getDuration();
-            Log.d(TAG, String.format("Video dimensions: %dx%d, duration: %dms", 
-                                    videoWidth, videoHeight, duration));
-            
-            // Start playback
             videoView.start();
         });
         
-        // Set up error listener for playback problems
         videoView.setOnErrorListener((mp, what, extra) -> {
-            // Log detailed error information
             Log.e(TAG, String.format("Video playback error: what=%d, extra=%d", what, extra));
-            
-            // Show error message to user
             Toast.makeText(requireContext(), 
                     getString(R.string.video_error_message), 
                     Toast.LENGTH_SHORT).show();
-            
-            // Show play button so user can try again
             ivPlayButton.setVisibility(View.VISIBLE);
-            
-            return true; // Error handled
+            return true;
         });
     }
 
     private void showPurchaseConfirmationDialog() {
-        final String TAG = "CourseDetailDialog";
+        Log.i(TAG, "Showing purchase confirmation dialog");
         
-        // Pre-check conditions
         User currentUser = DataManager.getInstance().getCurrentUser();
         if (currentUser == null) {
             Log.e(TAG, "Cannot show purchase dialog: current user is null");
@@ -874,18 +766,11 @@ public class CourseDetailDialog extends DialogFragment {
             Log.e(TAG, "Cannot show purchase dialog: course is null");
             return;
         }
-        
-        Log.d(TAG, "Preparing purchase confirmation dialog for course: " + course.getId());
 
         try {
-            // Inflate the dialog layout
             View view = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_purchase_confirmation, null);
-            if (view == null) {
-                Log.e(TAG, "Failed to inflate purchase confirmation dialog layout");
-                return;
-            }
-    
-            // Find all views in the dialog layout
+            Log.v(TAG, "Purchase confirmation dialog layout inflated");
+            
             TextView tvPurchaseCourseName = view.findViewById(R.id.tvPurchaseCourseName);
             TextView tvPurchasePrice = view.findViewById(R.id.tvPurchasePrice);
             TextView tvPurchaseBalance = view.findViewById(R.id.tvPurchaseBalance);
@@ -893,20 +778,19 @@ public class CourseDetailDialog extends DialogFragment {
             Button btnCancelPurchase = view.findViewById(R.id.btnCancelPurchase);
             Button btnConfirmPurchase = view.findViewById(R.id.btnConfirmPurchase);
             
-            // Update button text from string resources
             btnCancelPurchase.setText(getString(R.string.cancel));
             btnConfirmPurchase.setText(getString(R.string.confirm));
     
-            // Format currency values for display
             NumberFormat format = NumberFormat.getCurrencyInstance(Locale.GERMANY);
             format.setCurrency(Currency.getInstance("EUR"));
             
-            // Calculate purchase details
             double currentBalance = currentUser.getWallet();
             double price = course.getPrice();
             double newBalance = currentBalance - price;
             
-            // Check if purchase is valid before showing dialog
+            Log.v(TAG, String.format("Purchase details: balance=%.2f, price=%.2f, newBalance=%.2f", 
+                    currentBalance, price, newBalance));
+            
             if (currentBalance < price) {
                 Log.w(TAG, "Insufficient funds for purchase: " + currentBalance + " < " + price);
                 Toast.makeText(requireContext(), getString(R.string.insufficient_funds), 
@@ -914,100 +798,93 @@ public class CourseDetailDialog extends DialogFragment {
                 return;
             }
     
-            // Set values in dialog
             tvPurchaseCourseName.setText(course.getName());
             tvPurchasePrice.setText(format.format(price));
             tvPurchaseBalance.setText(format.format(currentBalance));
             tvPurchaseNewBalance.setText(format.format(newBalance));
             
-            // Log purchase details
-            Log.i(TAG, String.format("Purchase confirmation dialog prepared: Course=%s (%s), " +
-                                    "Price=%.2f, Balance=%.2f, NewBalance=%.2f",
-                                    course.getName(), course.getId(), price, currentBalance, newBalance));
-    
-            // Create the confirmation dialog
             Dialog confirmationDialog = new MaterialAlertDialogBuilder(requireContext())
                     .setView(view)
                     .setCancelable(true)
                     .create();
     
-            // Set cancel button listener
             btnCancelPurchase.setOnClickListener(v -> {
                 Log.d(TAG, "Purchase cancelled by user");
                 confirmationDialog.dismiss();
             });
             
-            // Set confirm button listener
             btnConfirmPurchase.setOnClickListener(v -> {
-                Log.d(TAG, "Purchase confirmed by user, processing...");
-                
-                // Attempt to make the purchase
-                boolean purchaseSuccessful = DataManager.getInstance().purchaseCourse(course.getId());
+                Log.d(TAG, "Purchase confirmed, proceeding with transaction");
                 confirmationDialog.dismiss();
-    
-                if (purchaseSuccessful) {
-                    Log.i(TAG, "Purchase successful: " + course.getName() + " (" + course.getId() + ")");
-                    
-                    // Show success message
-                    Toast.makeText(requireContext(), getString(R.string.purchase_successful), 
-                                  Toast.LENGTH_SHORT).show();
-                    
-                    // Notify listener about successful purchase
-                    if (purchaseCompletedListener != null) {
-                        purchaseCompletedListener.onPurchaseCompleted();
-                        Log.d(TAG, "Purchase completion callback sent");
-                    }
-                    
-                    // Close the course detail dialog
-                    dismiss();
-                } else {
-                    // Purchase failed - likely insufficient funds
-                    Log.w(TAG, "Purchase failed for course: " + course.getId());
-                    Toast.makeText(requireContext(), getString(R.string.purchase_failed), 
-                                  Toast.LENGTH_SHORT).show();
-                }
+                purchaseCourse(currentUser.getEmail(), course.getId(), course.getPrice());
             });
     
-            // Show the dialog
             confirmationDialog.show();
-            Log.d(TAG, "Purchase confirmation dialog displayed");
+            Log.i(TAG, "Purchase confirmation dialog displayed");
             
         } catch (Exception e) {
-            // Handle any unexpected errors in dialog creation
             Log.e(TAG, "Error showing purchase confirmation dialog: " + e.getMessage(), e);
             Toast.makeText(requireContext(), getString(R.string.dialog_error), Toast.LENGTH_SHORT).show();
         }
     }
+    
+    private void purchaseCourse(String userId, String courseId, double price) {
+        Log.i(TAG, String.format("Purchasing course: userId=%s, courseId=%s, price=%.2f", 
+                userId, courseId, price));
+        showLoading(true);
+        
+        MarketplaceFirestoreManager.getInstance().purchaseCourse(userId, courseId, price, new MarketplaceFirestoreManager.OnPurchaseListener() {
+            @Override
+            public void onPurchaseSuccess() {
+                Log.i(TAG, "Purchase completed successfully");
+                showLoading(false);
+                Toast.makeText(requireContext(), getString(R.string.purchase_successful), Toast.LENGTH_SHORT).show();
+                
+                if (purchaseCompletedListener != null) {
+                    Log.d(TAG, "Notifying purchase completion listener");
+                    purchaseCompletedListener.onPurchaseCompleted();
+                }
+                
+                dismiss();
+            }
+
+            @Override
+            public void onError(String errorMessage) {
+                Log.e(TAG, "Purchase failed: " + errorMessage);
+                showLoading(false);
+                Toast.makeText(requireContext(), getString(R.string.purchase_failed) + ": " + errorMessage, 
+                              Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
 
     private void showRelatedCourseDetail(Course relatedCourse) {
-        // Log the navigation
-        Log.d("CourseDetailDialog", "Navigating to related course: " + relatedCourse.getName() 
-            + " (" + relatedCourse.getId() + ")");
-            
-        // Dismiss this dialog
+        Log.i(TAG, "Opening related course: " + relatedCourse.getName() + " (" + relatedCourse.getId() + ")");
         dismiss();
 
-        // Show the related course detail dialog
         CourseDetailDialog dialog = CourseDetailDialog.newInstance(relatedCourse.getId());
         dialog.setPurchaseCompletedListener(purchaseCompletedListener);
         dialog.show(getParentFragmentManager(), "RelatedCourseDetail");
     }
 
     public void setPurchaseCompletedListener(PurchaseCompletedListener listener) {
+        Log.d(TAG, "Setting purchase completed listener");
         this.purchaseCompletedListener = listener;
     }
 
-    // Adapter for the reviews list
     private static class ReviewAdapter extends RecyclerView.Adapter<ReviewAdapter.ReviewViewHolder> {
+        private static final String TAG = "ReviewAdapter";
         private List<Course.Review> reviews;
 
         public ReviewAdapter(List<Course.Review> reviews) {
+            Log.v(TAG, "Creating adapter with " + (reviews != null ? reviews.size() : 0) + " reviews");
             this.reviews = reviews;
         }
 
         @NonNull
         @Override
         public ReviewViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            Log.v(TAG, "Creating review view holder");
             View view = LayoutInflater.from(parent.getContext())
                     .inflate(R.layout.item_review, parent, false);
             return new ReviewViewHolder(view);
@@ -1016,6 +893,7 @@ public class CourseDetailDialog extends DialogFragment {
         @Override
         public void onBindViewHolder(@NonNull ReviewViewHolder holder, int position) {
             Course.Review review = reviews.get(position);
+            Log.v(TAG, "Binding review at position " + position + ": " + review.getUser());
             holder.bind(review);
         }
 
@@ -1044,8 +922,8 @@ public class CourseDetailDialog extends DialogFragment {
         }
     }
 
-    // Adapter for the related courses list
     private static class RelatedCourseAdapter extends RecyclerView.Adapter<RelatedCourseAdapter.RelatedCourseViewHolder> {
+        private static final String TAG = "RelatedCourseAdapter";
         private List<Course> relatedCourses;
         private OnRelatedCourseClickListener listener;
 
@@ -1054,6 +932,7 @@ public class CourseDetailDialog extends DialogFragment {
         }
 
         public RelatedCourseAdapter(List<Course> relatedCourses, OnRelatedCourseClickListener listener) {
+            Log.v(TAG, "Creating adapter with " + (relatedCourses != null ? relatedCourses.size() : 0) + " related courses");
             this.relatedCourses = relatedCourses;
             this.listener = listener;
         }
@@ -1061,6 +940,7 @@ public class CourseDetailDialog extends DialogFragment {
         @NonNull
         @Override
         public RelatedCourseViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            Log.v(TAG, "Creating related course view holder");
             View view = LayoutInflater.from(parent.getContext())
                     .inflate(R.layout.item_related_course, parent, false);
             return new RelatedCourseViewHolder(view);
@@ -1069,6 +949,7 @@ public class CourseDetailDialog extends DialogFragment {
         @Override
         public void onBindViewHolder(@NonNull RelatedCourseViewHolder holder, int position) {
             Course course = relatedCourses.get(position);
+            Log.v(TAG, "Binding related course at position " + position + ": " + course.getName());
             holder.bind(course);
         }
 
@@ -1091,6 +972,7 @@ public class CourseDetailDialog extends DialogFragment {
                 itemView.setOnClickListener(v -> {
                     int position = getAdapterPosition();
                     if (position != RecyclerView.NO_POSITION && listener != null) {
+                        Log.d(TAG, "Related course clicked at position " + position);
                         listener.onRelatedCourseClicked(relatedCourses.get(position));
                     }
                 });
@@ -1099,13 +981,27 @@ public class CourseDetailDialog extends DialogFragment {
             public void bind(Course course) {
                 tvRelatedCourseTitle.setText(course.getName());
 
-                // Format price
                 NumberFormat format = NumberFormat.getCurrencyInstance(Locale.GERMANY);
                 format.setCurrency(Currency.getInstance("EUR"));
                 tvRelatedCoursePrice.setText(format.format(course.getPrice()));
 
-                // Set placeholder logo
-                ivRelatedCourseLogo.setBackgroundColor(0xFF2196F3); // Blue placeholder
+                // Set color based on course module for consistency
+                int colorCode;
+                if (course.getRelatedModule() != null) {
+                    int hash = course.getRelatedModule().hashCode();
+                    int[] colors = {
+                        0xFF4CAF50, // Green
+                        0xFF2196F3, // Blue
+                        0xFFFF9800, // Orange
+                        0xFF9C27B0, // Purple
+                        0xFFE91E63  // Pink
+                    };
+                    colorCode = colors[Math.abs(hash) % colors.length];
+                } else {
+                    colorCode = 0xFF2196F3; // Blue placeholder
+                }
+                
+                ivRelatedCourseLogo.setBackgroundColor(colorCode);
             }
         }
     }

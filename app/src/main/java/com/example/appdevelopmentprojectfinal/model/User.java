@@ -1,8 +1,13 @@
 package com.example.appdevelopmentprojectfinal.model;
 
+import android.util.Log;
+
+import java.util.ArrayList;
 import java.util.List;
 
 public class User {
+    private static final String TAG = "User";
+    
     private String email;
     private String firstName;
     private String lastName;
@@ -119,18 +124,43 @@ public class User {
 
     // Helper methods
     public boolean ownsModule(String courseId) {
-        return ownedCourses != null && ownedCourses.contains(courseId);
+        boolean result = ownedCourses != null && ownedCourses.contains(courseId);
+        Log.v(TAG, "Checking ownership for course " + courseId + ": " + result);
+        return result;
     }
 
     public boolean hasEnoughFunds(double amount) {
-        return wallet >= amount;
+        boolean result = wallet >= amount;
+        Log.v(TAG, String.format("Checking if user has enough funds: %.2f required, %.2f available: %s", 
+                amount, wallet, result ? "sufficient" : "insufficient"));
+        return result;
     }
 
     public void purchaseCourse(String courseId, double price) {
-        if (hasEnoughFunds(price) && !ownsModule(courseId)) {
-            wallet -= price;
-            ownedCourses.add(courseId);
+        Log.i(TAG, String.format("Processing purchase of course %s for %.2f", courseId, price));
+        
+        if (!hasEnoughFunds(price)) {
+            Log.w(TAG, String.format("Purchase failed: insufficient funds (%.2f required, %.2f available)", 
+                    price, wallet));
+            return;
         }
+        
+        if (ownsModule(courseId)) {
+            Log.w(TAG, "Purchase failed: user already owns course " + courseId);
+            return;
+        }
+        
+        // Initialize ownedCourses list if it's null
+        if (ownedCourses == null) {
+            Log.d(TAG, "Initializing owned courses list");
+            ownedCourses = new ArrayList<>();
+        }
+        
+        // Process the purchase
+        wallet -= price;
+        ownedCourses.add(courseId);
+        Log.i(TAG, String.format("Purchase successful: course %s added, new balance: %.2f", 
+                courseId, wallet));
     }
 
     public String getFullName() {

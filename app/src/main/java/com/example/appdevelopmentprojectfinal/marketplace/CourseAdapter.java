@@ -7,13 +7,14 @@ import android.widget.ImageView;
 import android.widget.RatingBar;
 import android.widget.TextView;
 
+import android.util.Log;
+
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.appdevelopmentprojectfinal.R;
 import com.example.appdevelopmentprojectfinal.model.Course;
 import com.example.appdevelopmentprojectfinal.model.Module;
-import com.example.appdevelopmentprojectfinal.utils.DataManager;
 
 import java.text.NumberFormat;
 import java.util.Currency;
@@ -26,6 +27,8 @@ public class CourseAdapter extends RecyclerView.Adapter<CourseAdapter.CourseView
         void onCourseClicked(Course course);
     }
 
+    private static final String TAG = "CourseAdapter";
+    
     private List<Course> courses;
     private CourseClickListener listener;
     private NumberFormat currencyFormat;
@@ -33,8 +36,6 @@ public class CourseAdapter extends RecyclerView.Adapter<CourseAdapter.CourseView
     public CourseAdapter(List<Course> courses, CourseClickListener listener) {
         this.courses = courses;
         this.listener = listener;
-        
-        // Set up currency formatter for Euro
         currencyFormat = NumberFormat.getCurrencyInstance(Locale.GERMANY);
         currencyFormat.setCurrency(Currency.getInstance("EUR"));
     }
@@ -81,8 +82,6 @@ public class CourseAdapter extends RecyclerView.Adapter<CourseAdapter.CourseView
             ratingBar = itemView.findViewById(R.id.ratingBar);
             tvRating = itemView.findViewById(R.id.tvRating);
             tvPrice = itemView.findViewById(R.id.tvPrice);
-
-            // Set click listener
             itemView.setOnClickListener(v -> {
                 int position = getAdapterPosition();
                 if (position != RecyclerView.NO_POSITION && listener != null) {
@@ -108,30 +107,36 @@ public class CourseAdapter extends RecyclerView.Adapter<CourseAdapter.CourseView
             // Set price
             tvPrice.setText(currencyFormat.format(course.getPrice()));
 
-            // Set logo (in a real app, you would load an image here)
-            // For now, we'll just set a placeholder based on the module code
-            Module module = DataManager.getInstance().getModuleByCode(course.getRelatedModule());
-            if (module != null) {
-                // In a real app, you would use an image loading library like Glide or Picasso
-                // For now, we'll just use different colors based on the module code
-                int colorRes;
-                switch (module.getCode().charAt(0)) {
+            // Set logo based on the module code
+            // TODO: do real logo stuff
+            String moduleCode = course.getRelatedModule();
+            Log.v(TAG, "Setting course logo color for module code: " + moduleCode);
+            
+            if (moduleCode != null && !moduleCode.isEmpty()) {
+                // Use different colors based on the module code's first character
+                char firstChar = moduleCode.charAt(0);
+                switch (firstChar) {
                     case 'C':
-                        ivCourseLogo.setBackgroundColor(0xFF4CAF50); // Green
+                        ivCourseLogo.setBackgroundColor(0xFF4CAF50); // Green for Computer Science
+                        Log.v(TAG, "Setting green color for CS module");
                         break;
                     case 'E':
-                        ivCourseLogo.setBackgroundColor(0xFF2196F3); // Blue
+                        ivCourseLogo.setBackgroundColor(0xFF2196F3); // Blue for Engineering
+                        Log.v(TAG, "Setting blue color for Engineering module");
                         break;
                     case 'M':
-                        ivCourseLogo.setBackgroundColor(0xFFFF9800); // Orange
+                        ivCourseLogo.setBackgroundColor(0xFFFF9800); // Orange for Mathematics
+                        Log.v(TAG, "Setting orange color for Mathematics module");
                         break;
                     default:
-                        ivCourseLogo.setBackgroundColor(0xFF9C27B0); // Purple
+                        ivCourseLogo.setBackgroundColor(0xFF9C27B0); // Purple for others
+                        Log.v(TAG, "Setting purple color for other module type");
                         break;
                 }
-                
-                // Set the first two letters of the module code as text on the image
-                // This would be replaced by actual images in a real app
+            } else {
+                // Default color if no module code
+                ivCourseLogo.setBackgroundColor(0xFF9C27B0); // Purple
+                Log.v(TAG, "Setting default purple color (no module code)");
             }
         }
     }

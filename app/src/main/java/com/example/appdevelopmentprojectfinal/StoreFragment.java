@@ -5,6 +5,7 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -13,10 +14,10 @@ import androidx.fragment.app.FragmentManager;
 import androidx.viewpager2.adapter.FragmentStateAdapter;
 import androidx.viewpager2.widget.ViewPager2;
 
+import com.example.appdevelopmentprojectfinal.marketplace.MarketplaceFirestoreManager;
 import com.example.appdevelopmentprojectfinal.marketplace.RecommendedCoursesFragment;
 import com.example.appdevelopmentprojectfinal.marketplace.TrendingCoursesFragment;
 import com.example.appdevelopmentprojectfinal.model.User;
-import com.example.appdevelopmentprojectfinal.utils.DataManager;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 
@@ -52,19 +53,46 @@ public class StoreFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-
-        //Removed local DataManager initialization so added below incase
-        User user = DataManager.getInstance().getCurrentUser();
-        if (user != null) {
-            Log.d(TAG, "User loaded: " + user.getFullName());
-        }
+        Log.i(TAG, "Initializing StoreFragment");
 
         // Initialize views
         tabLayout = view.findViewById(R.id.tabLayout);
         viewPager = view.findViewById(R.id.viewPager);
 
-        // Set up ViewPager with the tabs
-        setUpViewPager();
+        // Initialize user data from Firestore
+        initializeUserData();
+    }
+    
+    private void initializeUserData() {
+        Log.i(TAG, "Loading user data from Firestore");
+        
+        // First try to get user from DataManager as fallback
+        User dataManagerUser = null;
+        try {
+            dataManagerUser = com.example.appdevelopmentprojectfinal.utils.DataManager.getInstance().getCurrentUser();
+        } catch (Exception e) {
+            Log.e(TAG, "Error accessing DataManager: " + e.getMessage());
+        }
+        
+        // Get user ID from DataManager or use default
+        String userId = (dataManagerUser != null) ? dataManagerUser.getEmail() : "default@studentmail.ul.ie";
+        
+        MarketplaceFirestoreManager.getInstance().loadCurrentUser(userId, new MarketplaceFirestoreManager.OnUserLoadedListener() {
+            @Override
+            public void onUserLoaded(User user) {
+                Log.i(TAG, "User loaded successfully: " + user.getEmail());
+                // Set up ViewPager with the tabs after user is loaded
+                setUpViewPager();
+            }
+            
+            @Override
+            public void onError(String errorMessage) {
+                Log.e(TAG, "Error loading user: " + errorMessage);
+                Toast.makeText(getContext(), "Error loading marketplace data: " + errorMessage, Toast.LENGTH_SHORT).show();
+                // Still set up the UI, but it may not have user-specific data
+                setUpViewPager();
+            }
+        });
     }
 
     // Setup tabs for viewpager

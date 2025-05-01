@@ -1,8 +1,16 @@
 package com.example.appdevelopmentprojectfinal.model;
 
+import android.util.Log;
+
+import com.google.firebase.firestore.Exclude;
+import com.google.firebase.firestore.IgnoreExtraProperties;
+
 import java.util.List;
 
+@IgnoreExtraProperties
 public class Course {
+    private static final String TAG = "Course";
+    
     private String id;
     private String name;
     private String relatedModule;
@@ -17,10 +25,11 @@ public class Course {
     private CourseStatistics statistics;
 
     public Course() {
-        // Empty constructor required for JSON deserialization
+        // Empty constructor required for Firestore deserialization
     }
 
     // Getters and setters
+    @Exclude
     public String getId() {
         return id;
     }
@@ -118,17 +127,21 @@ public class Course {
     }
 
     // Helper method to get the module code from the related module
+    @Exclude
     public String getModuleCode() {
-        return relatedModule != null ? relatedModule : "";
+        String moduleCode = relatedModule != null ? relatedModule : "";
+        Log.v(TAG, "Getting module code for course " + id + ": " + moduleCode);
+        return moduleCode;
     }
 
     // Inner classes for nested objects
+    @IgnoreExtraProperties
     public static class CourseContent {
         private List<Chapter> chapters;
         private Preview preview;
 
         public CourseContent() {
-            // Empty constructor required for JSON deserialization
+            // Empty constructor required for Firestore deserialization
         }
 
         public List<Chapter> getChapters() {
@@ -148,12 +161,13 @@ public class Course {
         }
     }
 
+    @IgnoreExtraProperties
     public static class Chapter {
         private String title;
         private List<ContentItem> items;
 
         public Chapter() {
-            // Empty constructor required for JSON deserialization
+            // Empty constructor required for Firestore deserialization
         }
 
         public String getTitle() {
@@ -173,12 +187,13 @@ public class Course {
         }
     }
 
+    @IgnoreExtraProperties
     public static class Preview {
         private String title;
         private List<ContentItem> items;
 
         public Preview() {
-            // Empty constructor required for JSON deserialization
+            // Empty constructor required for Firestore deserialization
         }
 
         public String getTitle() {
@@ -198,6 +213,7 @@ public class Course {
         }
     }
 
+    @IgnoreExtraProperties
     public static class ContentItem {
         private String type;
         private String url;
@@ -206,7 +222,7 @@ public class Course {
         private String caption;
 
         public ContentItem() {
-            // Empty constructor required for JSON deserialization
+            // Empty constructor required for Firestore deserialization
         }
 
         public String getType() {
@@ -250,13 +266,14 @@ public class Course {
         }
     }
 
+    @IgnoreExtraProperties
     public static class Review {
         private String user;
         private double rating;
         private String comment;
 
         public Review() {
-            // Empty constructor required for JSON deserialization
+            // Empty constructor required for Firestore deserialization
         }
 
         public String getUser() {
@@ -284,13 +301,14 @@ public class Course {
         }
     }
 
+    @IgnoreExtraProperties
     public static class CourseStatistics {
         private int totalPurchases;
         private int viewsToday;
         private int purchasesToday;
 
         public CourseStatistics() {
-            // Empty constructor required for JSON deserialization
+            // Empty constructor required for Firestore deserialization
         }
 
         public int getTotalPurchases() {
