@@ -145,8 +145,13 @@ public class ModuleManagementAdapter extends RecyclerView.Adapter<ModuleManageme
         Context tempContext = holder.cardView.getContext();
         Boolean moduleStatus = jsonUtil.getShowStatusForModule(tempContext, module.getCode());
 
-        holder.visibilityToggle.setChecked(moduleStatus);
-        moduleGroup.setAllVisible(moduleStatus);
+        /*holder.visibilityToggle.setChecked(moduleStatus);
+        moduleGroup.setAllVisible(moduleStatus);*/
+        
+        boolean isVisible = moduleStatus != null ? moduleStatus : true;
+        holder.visibilityToggle.setChecked(isVisible);
+        moduleGroup.setAllVisible(isVisible);
+        
         holder.visibilityToggle.setOnCheckedChangeListener((buttonView, isChecked) -> {
             moduleGroup.setAllVisible(isChecked);
             listener.onModuleVisibilityChanged();
