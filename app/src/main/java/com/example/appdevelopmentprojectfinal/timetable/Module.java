@@ -72,8 +72,8 @@ public class Module {
         this.alternativeSlots = alternativeSlots;
     }
 
-    String getLecturer() { return lecturer; }
-
+    public String getLecturer() { return lecturer; }
+    public void setLecturer(String lecturer) {this.lecturer = lecturer;}
     public String getDocumentId() {
         return documentId;
     }
