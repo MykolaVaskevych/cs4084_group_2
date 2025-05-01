@@ -18,19 +18,16 @@ public class Module {
     private String code;
     private String name;
     private String lecturer;
-
     private boolean show;
     private String documentId;
-
     private String type;
+    private String userId;
 
     private List<TimeSlot> timeSlotList;
-
     private List<TimeSlot> alternativeSlots;
 
-
     public Module() {
-
+        // (required for firestore)
     }
 
     public Module(String code, String name, String lecturer, boolean show) {
@@ -42,8 +39,15 @@ public class Module {
         this.alternativeSlots = new ArrayList<>();
     }
 
-    public String getCode() { return code; }
-    public String getName() { return name; }
+    // Getters
+    public String getCode() {
+        return code;
+    }
+
+    public String getName() {
+        return name;
+    }
+
     public boolean isShow() {
         return show;
     }
@@ -56,6 +60,31 @@ public class Module {
         return timeSlotList;
     }
 
+    public List<TimeSlot> getAlternativeSlots() {
+        return alternativeSlots;
+    }
+
+    public String getLecturer() {
+        return lecturer;
+    }
+
+    public String getDocumentId() {
+        return documentId;
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+
+    public void setLecturer(String lecturer) {
+        this.lecturer = lecturer;
+    }
+
+    public void setDocumentId(String documentId) {
+        this.documentId = documentId;
+    }
+
     public void setTimeSlotList(List<TimeSlot> timeSlotList) {
         this.timeSlotList = timeSlotList;
     }
@@ -64,21 +93,12 @@ public class Module {
         this.type = type;
     }
 
-    public List<TimeSlot> getAlternativeSlots() {
-        return alternativeSlots;
-    }
-
     public void setAlternativeSlots(List<TimeSlot> alternativeSlots) {
         this.alternativeSlots = alternativeSlots;
     }
 
-    public String getLecturer() { return lecturer; }
-    public void setLecturer(String lecturer) {this.lecturer = lecturer;}
-    public String getDocumentId() {
-        return documentId;
-    }
-    public void setDocumentId(String documentId) {
-        this.documentId = documentId;
+    public void setUserId(String userId) {
+        this.userId = userId;
     }
 
     @Override
@@ -110,6 +130,7 @@ public class Module {
                 "\"name\":\"" + name + "\"," +
                 "\"lecturer\":\"" + lecturer + "\"," +
                 "\"type\":\"" + type + "\"," +
+                "\"userId\":\"" + (userId != null ? userId : "") + "\"," +
                 "\"show\":" + show + "," +
                 "\"slots\":" + slotsString.toString() + "," +
                 "\"alternativeSlots\":" + alternativeSlotsString.toString() +

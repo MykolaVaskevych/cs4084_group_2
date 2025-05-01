@@ -4,6 +4,7 @@ import android.util.Log;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class User {
     private static final String TAG = "User";
@@ -19,6 +20,8 @@ public class User {
     private List<String> modules;
     private String profilePhoto;
     private List<String> ownedCourses;
+    private List<Map<String, Object>> timetableModules;
+
     private double wallet;
 
     public User() {
@@ -120,6 +123,12 @@ public class User {
 
     public void setWallet(double wallet) {
         this.wallet = wallet;
+    }
+    public List<Map<String, Object>> getTimetableModules() {
+        return timetableModules;
+    }
+    public void setTimetableModules(List<Map<String, Object>> timetableModules) {
+        this.timetableModules = timetableModules;
     }
 
     // Helper methods

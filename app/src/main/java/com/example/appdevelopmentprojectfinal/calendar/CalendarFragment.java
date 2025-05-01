@@ -4,6 +4,7 @@ import android.app.DatePickerDialog;
 import android.app.TimePickerDialog;
 import android.content.DialogInterface;
 import android.content.SharedPreferences;
+import android.content.Intent;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -38,6 +39,7 @@ import androidx.core.view.MenuProvider;
 import androidx.lifecycle.Lifecycle;
 
 import com.example.appdevelopmentprojectfinal.R;
+import com.example.appdevelopmentprojectfinal.auth.LoginActivity;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.datepicker.MaterialDatePicker;
 import com.google.android.material.timepicker.MaterialTimePicker;
@@ -159,12 +161,6 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
             @Override
             public boolean onMenuItemSelected(@NonNull MenuItem menuItem) {
                 int id = menuItem.getItemId();
-                
-                if (id == R.id.action_sync) {
-                    syncEventsToFirestore();
-                    return true;
-                }
-                
                 return false;
             }
         }, getViewLifecycleOwner(), Lifecycle.State.RESUMED);
@@ -435,10 +431,15 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
     private void loadItems() {
         StringBuilder headerBuilder = new StringBuilder();
         
-        // Filter events based on current tab
+        // Filter events based on current tab and user ID
         List<Event> filteredEvents = new ArrayList<>();
         
         for (Event event : currentEvents) {
+            // 确保只显示当前用户的事件
+            if (!event.getUserId().equals(userId)) {
+                continue;
+            }
+            
             // Check if event is on selected date (for Todo and Events tabs)
             boolean isOnSelectedDate = CalendarHelper.isSameDay(event.getDate(), new Date(selectedDate));
             
@@ -730,6 +731,11 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
         
         // Add markers for all events
         for (Event event : currentEvents) {
+            // Only show current user's events
+            if (!event.getUserId().equals(userId)) {
+                continue;
+            }
+            
             Calendar calendar = getCalendarFromDate(event.getDate());
             if (event.getType() == Event.TYPE_EVENT) {
                 customCalendarView.addEvent(calendar, CustomCalendarView.TYPE_EVENT);
@@ -757,10 +763,13 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
             userId = currentUser.getUid();
             Log.d(TAG, "Using Firebase user ID: " + userId);
         } else {
-            // Use default account
-            userId = "default_user";
-            Log.d(TAG, "No authenticated user found, using default user ID: " + userId);
-            Toast.makeText(requireContext(), "Using default account", Toast.LENGTH_SHORT).show();
+            // Clear current user ID
+            userId = null;
+            // Prompt user to login
+            Toast.makeText(requireContext(), "Please login to access your calendar", Toast.LENGTH_SHORT).show();
+            // Navigate to login page
+            startActivity(new Intent(requireActivity(), LoginActivity.class));
+            requireActivity().finish();
         }
     }
     
@@ -768,7 +777,13 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
     public void onResume() {
         super.onResume();
         
-        // Load events from local storage and Firestore
+        // Check if user is logged in
+        if (userId == null) {
+            initializeUserId();
+            return;
+        }
+        
+        // Load events from Firestore
         CalendarHelper.loadAllEvents(requireContext(), userId, new CalendarHelper.OnEventsLoadedListener() {
             @Override
             public void onEventsLoaded(List<Event> events) {
@@ -780,29 +795,6 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
                 
                 // Load events list
                 loadItems();
-            }
-        });
-    }
-    
-    /**
-     * Sync local events to Firestore
-     */
-    private void syncEventsToFirestore() {
-        Toast.makeText(requireContext(), "Starting sync...", Toast.LENGTH_SHORT).show();
-        
-        CalendarHelper.syncLocalEventsToFirestore(requireContext(), userId, new CalendarHelper.OnSyncCompletedListener() {
-            @Override
-            public void onSyncCompleted(int syncedCount, int failedCount) {
-                if (getContext() == null) return;
-                
-                if (failedCount == 0) {
-                    Toast.makeText(requireContext(), "Sync completed: " + syncedCount + " events synced", Toast.LENGTH_SHORT).show();
-                } else {
-                    Toast.makeText(requireContext(), "Sync completed: " + syncedCount + " succeeded, " + failedCount + " failed", Toast.LENGTH_SHORT).show();
-                }
-                
-                // Reload events to refresh display
-                onResume();
             }
         });
     }

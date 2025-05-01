@@ -29,6 +29,8 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.appdevelopmentprojectfinal.R;
 import com.example.appdevelopmentprojectfinal.utils.JsonUtil;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 
@@ -60,6 +62,9 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
 
     private Button addModuleButton;
     LinearLayout linearLayoutSlots;
+
+    private String currentUserId;
+    private boolean isUserLoggedIn = false;
 
     private static final String[] TIME_SLOTS = {
             "09:00-10:00", "10:00-11:00", "11:00-12:00", "12:00-13:00",
@@ -99,6 +104,8 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
+        initializeCurrentUser();
+
         timetableGrid = view.findViewById(R.id.timetable_grid);
         emptyView = view.findViewById(R.id.empty_view);
         moduleListView = view.findViewById(R.id.module_list);
@@ -116,6 +123,11 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
 
         addModuleButton = view.findViewById(R.id.add_module_button);
         addModuleButton.setOnClickListener(v -> {
+            if (!isUserLoggedIn) {
+                Toast.makeText(requireContext(), "Please log in to add modules to your timetable", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
             LayoutInflater inflater = LayoutInflater.from(getContext());
             View dialogView = inflater.inflate(R.layout.dialog_add_module, null);
 
@@ -144,6 +156,7 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                     return;
                 }
                 confirmButton.setVisibility(View.VISIBLE);
+
                 LinearLayout newSlotLayout = new LinearLayout(requireContext());
                 newSlotLayout.setOrientation(LinearLayout.VERTICAL);
                 newSlotLayout.setTag("mainSlotLayout");
@@ -187,8 +200,6 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                 startTimeSpinner.setTag("startTimeSpinner");
 
                 newSlotLayout.addView(startTimeSpinner);
-
-
 
                 Spinner endTimeSpinner = new Spinner(requireContext());
                 LinearLayout.LayoutParams endTimeLlayoutParams = new LinearLayout.LayoutParams(
@@ -321,7 +332,6 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                     altEndTimeSpinner.setTag("altEndTimeSpinner");
 
                     altSlotLayout.addView(altEndTimeSpinner);
-    // Test-proofed alternative slot location
                     TextView locationLabel = new TextView(requireContext());
                     locationLabel.setTextColor(Color.parseColor("#FF0000"));
                     altSlotLayout.addView(locationLabel);
@@ -352,7 +362,6 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                                             String mainLocation = ((EditText) view).getText().toString().trim();
                                             if (!mainLocation.isEmpty() && mainLocation.equals(s.toString().trim())) {
 //                                                altInputLocation.setError("This location is already used in another place slot");
-                                                // TODO:
                                                 isDuplicate = true;
                                                 break;
                                             }
@@ -413,7 +422,6 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                 String lecturer = lecturerInput.getText().toString().trim();
                 String type = typeSpinner.getSelectedItem().toString();
 
-
                 if (code.isEmpty()) {
                     codeInput.setError("Module code is required");
                     return;
@@ -453,7 +461,6 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                     return;
                 }
 
-
                 List<TimeSlot> timeSlotList = new ArrayList<>();
                 List<TimeSlot> alternativeSlotsList = new ArrayList<>();
                 boolean hasConflicts = false;
@@ -471,7 +478,6 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                         if (slotLayout != null) {
                             TimeSlot timeSlot = readSlotLayout(slotLayout);
 
-                            // Check for conflicts with the main slot
                             String conflicts = checkTimeConflicts(timeSlot.getDay(), timeSlot.getStartTime(), timeSlot.getEndTime());
                             if (conflicts != null) {
                                 hasConflicts = true;
@@ -496,7 +502,6 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                                     if (altChildView instanceof LinearLayout && "alternativeSlot".equals(altChildView.getTag())) {
                                         TimeSlot altTimeSlot = readSlotLayout((LinearLayout) altChildView);
 
-                                        // Check for conflicts with alternative slots
                                         conflicts = checkTimeConflicts(altTimeSlot.getDay(), altTimeSlot.getStartTime(), altTimeSlot.getEndTime());
                                         if (conflicts != null) {
                                             hasConflicts = true;
@@ -523,6 +528,7 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                 module.setType(type);
                 module.setTimeSlotList(timeSlotList);
                 module.setAlternativeSlots(alternativeSlotsList);
+                module.setUserId(currentUserId);
 
                 if (hasConflicts) {
                     new AlertDialog.Builder(requireContext())
@@ -530,7 +536,7 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                             .setMessage("This module overlaps with existing modules:\n\n" +
                                     conflictMessages.toString() +
                                     "\nAre you sure you want to add it?")
-                                    .setPositiveButton("Add Anyway", (dialogInterface, which) -> {
+                            .setPositiveButton("Add Anyway", (dialogInterface, which) -> {
                                 try {
                                     addModule(module);
                                 } catch (JSONException e) {
@@ -540,7 +546,7 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                                 SaveModuleDetails(module);
                             })
                             .setNegativeButton("Cancel", null)
-                             .show();
+                            .show();
                 } else {
                     try {
                         addModule(module);
@@ -553,10 +559,6 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
             });
         });
 
-
-
-        //loadTimetableData();
-
         moduleAdapter = new ModuleManagementAdapter(moduleSchedules, this);
         moduleListView.setAdapter(moduleAdapter);
 
@@ -564,17 +566,72 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
         displayTimetable();
     }
 
+    private void initializeCurrentUser() {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user != null) {
+            currentUserId = user.getEmail();
+            isUserLoggedIn = true;
+            Log.d("TimetableFragment", "User logged in: " + currentUserId);
+        } else {
+            currentUserId = "anonymous";
+            isUserLoggedIn = false;
+            Log.d("TimetableFragment", "No user logged in, using default ID");
+            Toast.makeText(requireContext(), "Log in to see your personalized timetable", Toast.LENGTH_SHORT).show();
+        }
+    }
+
     private void SaveModuleDetails(Module module) {
         FirebaseFirestore database = FirebaseFirestore.getInstance();
+
+        Map<String, Object> moduleData = new HashMap<>();
+        moduleData.put("code", module.getCode());
+        moduleData.put("name", module.getName());
+        moduleData.put("lecturer", module.getLecturer());
+        moduleData.put("type", module.getType());
+        moduleData.put("show", module.isShow());
+        moduleData.put("timeSlotList", module.getTimeSlotList());
+        moduleData.put("alternativeSlots", module.getAlternativeSlots());
+        moduleData.put("userId", currentUserId);
+
         database.collection("modules")
                 .document()
-                .set(module)
+                .set(moduleData)
                 .addOnSuccessListener(aVoid -> {
                     Toast.makeText(requireContext(), "Timetable data saved", Toast.LENGTH_SHORT).show();
+                    updateUserModulesList(module.getCode());
                     LoadModuleDetails();
                 })
                 .addOnFailureListener(exception -> {
                     Toast.makeText(requireContext(), "Failed to save timetable data", Toast.LENGTH_SHORT).show();
+                });
+    }
+
+    private void updateUserModulesList(String moduleCode) {
+        if (!isUserLoggedIn) return;
+
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        db.collection("users").document(currentUserId)
+                .get()
+                .addOnSuccessListener(documentSnapshot -> {
+                    if (documentSnapshot.exists()) {
+                        List<String> modules = (List<String>) documentSnapshot.get("modules");
+                        if (modules == null) {
+                            modules = new ArrayList<>();
+                        }
+
+                        if (!modules.contains(moduleCode)) {
+                            modules.add(moduleCode);
+
+                            db.collection("users").document(currentUserId)
+                                    .update("modules", modules)
+                                    .addOnSuccessListener(aVoid -> {
+                                        Log.d("TimetableFragment", "User modules list updated");
+                                    })
+                                    .addOnFailureListener(e -> {
+                                        Log.e("TimetableFragment", "Error updating user modules list", e);
+                                    });
+                        }
+                    }
                 });
     }
 
@@ -583,51 +640,48 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
             moduleSchedules.clear();
 
             FirebaseFirestore database = FirebaseFirestore.getInstance();
-            database.collection("modules").get().addOnSuccessListener(queryDocumentSnapshots -> {
-                if (isAdded()) {
-                    if (!queryDocumentSnapshots.isEmpty()) {
-                        for (DocumentSnapshot document : queryDocumentSnapshots) {
-                            Module module = document.toObject(Module.class);
-                            if (module != null) {
-                                module.setDocumentId(document.getId());
-                                List<TimeSlot> timeSlots = module.getTimeSlotList();
-                                if (timeSlots != null) {
-                                    for (TimeSlot timeSlot : timeSlots) {
-                                        boolean isMovable = true;
-                                        ModuleSchedule schedule = new ModuleSchedule(
-                                                module,
-                                                timeSlot,
-                                                isMovable,
-                                                module.isShow());
-//1
-                                        moduleSchedules.add(schedule);
+            database.collection("modules")
+                    .whereEqualTo("userId", currentUserId)
+                    .get()
+                    .addOnSuccessListener(queryDocumentSnapshots -> {
+                        if (isAdded()) {
+                            if (!queryDocumentSnapshots.isEmpty()) {
+                                for (DocumentSnapshot document : queryDocumentSnapshots) {
+                                    Module module = document.toObject(Module.class);
+                                    if (module != null) {
+                                        module.setDocumentId(document.getId());
+                                        List<TimeSlot> timeSlots = module.getTimeSlotList();
+                                        if (timeSlots != null) {
+                                            for (TimeSlot timeSlot : timeSlots) {
+                                                boolean isMovable = true;
+                                                ModuleSchedule schedule = new ModuleSchedule(
+                                                        module,
+                                                        timeSlot,
+                                                        isMovable,
+                                                        module.isShow());
+                                                moduleSchedules.add(schedule);
+                                            }
+                                        }
                                     }
                                 }
+
+                                moduleAdapter = new ModuleManagementAdapter(moduleSchedules, TimetableFragment.this);
+                                moduleListView.setAdapter(moduleAdapter);
+
+                                displayTimetable();
+                            } else {
+                                emptyView.setVisibility(View.VISIBLE);
                             }
                         }
-
-
-
-
-                        moduleAdapter = new ModuleManagementAdapter(moduleSchedules, TimetableFragment.this);
-                        moduleListView.setAdapter(moduleAdapter);
-
-                        displayTimetable();
-                    } else {
-                        emptyView.setVisibility(View.VISIBLE);
-                    }
-                }
-            }).addOnFailureListener(e -> {
-                if (isAdded()) {
-                    Toast.makeText(requireContext(), "Failed to load timetable data: " + e.getMessage(),
-                            Toast.LENGTH_SHORT).show();
-                    Log.e("TimetableFragment", "Error loading modules", e);
-                }
-            });
+                    }).addOnFailureListener(e -> {
+                        if (isAdded()) {
+                            Toast.makeText(requireContext(), "Failed to load timetable data: " + e.getMessage(),
+                                    Toast.LENGTH_SHORT).show();
+                            Log.e("TimetableFragment", "Error loading modules", e);
+                        }
+                    });
         }
     }
-
-
 
     private TimeSlot readSlotLayout(LinearLayout slotLayout) {
         String day = "";
@@ -971,11 +1025,13 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                     Toast.makeText(requireContext(), "Error loading module: " + e.getMessage(), Toast.LENGTH_SHORT).show();
                 });
     }
+
     private void deleteModule(Module module) {
         FirebaseFirestore database = FirebaseFirestore.getInstance();
 
         database.collection("modules")
                 .whereEqualTo("code", module.getCode())
+                .whereEqualTo("userId", currentUserId)
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
                     if (!queryDocumentSnapshots.isEmpty()) {
@@ -983,12 +1039,12 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
 
                         if (module.getDocumentId() != null && !module.getDocumentId().isEmpty()) {
                             documentId = module.getDocumentId();
-                            } else {
+                        } else {
                             DocumentSnapshot document = queryDocumentSnapshots.getDocuments().get(0);
                             documentId = document.getId();
-                            }
+                        }
 
-                                 database.collection("modules")
+                        database.collection("modules")
                                 .document(documentId)
                                 .delete()
                                 .addOnSuccessListener(aVoid -> {
@@ -996,8 +1052,9 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                                             module.getCode() + " has been deleted",
                                             Toast.LENGTH_SHORT).show();
 
+                                    removeFromUserModulesList(module.getCode());
                                     LoadModuleDetails();
-                                    })
+                                })
                                 .addOnFailureListener(e -> {
                                     Toast.makeText(requireContext(),
                                             "Could not delete the module: " + e.getMessage(),
@@ -1006,7 +1063,7 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                                 });
                     } else {
                         Toast.makeText(requireContext(),
-                                "Couldn't not found in database",
+                                "Module not found in database",
                                 Toast.LENGTH_SHORT).show();
                     }
                 })
@@ -1017,6 +1074,33 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                     Log.e("TimetableFragment", "Error querying the modules for deletion", e);
                 });
     }
+
+
+    private void removeFromUserModulesList(String moduleCode) {
+        if (!isUserLoggedIn) return;
+
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        db.collection("users").document(currentUserId)
+                .get()
+                .addOnSuccessListener(documentSnapshot -> {
+                    if (documentSnapshot.exists()) {
+                        List<String> modules = (List<String>) documentSnapshot.get("modules");
+                        if (modules != null && modules.contains(moduleCode)) {
+                            modules.remove(moduleCode);
+
+                            db.collection("users").document(currentUserId)
+                                    .update("modules", modules)
+                                    .addOnSuccessListener(aVoid -> {
+                                        Log.d("TimetableFragment", "Module removed from user modules list");
+                                    })
+                                    .addOnFailureListener(e -> {
+                                        Log.e("TimetableFragment", "Error updating user modules list", e);
+                                    });
+                        }
+                    }
+                });
+    }
+
     private boolean validateTimeSlots() {
         boolean isValid = true;
 
@@ -1147,7 +1231,6 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
         return isValid;
     }
 
-    // Helpers for checking alternative module location/time (Test-Proof)
     private static class SlotInfo {
         String day;
         String startTime;
@@ -1164,7 +1247,6 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
         }
     }
 
-    // Used for checking module alternative module time overlap
     private boolean timeOverlap(String start1, String end1, String start2, String end2) {
         if (end1.compareTo(start2) <= 0 || end2.compareTo(start1) <= 0) {
             return false;
@@ -1177,7 +1259,7 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
 
         for (ModuleSchedule schedule : moduleSchedules) {
             if (!schedule.isVisible()) {
-                continue; // Skipping non-visible modules
+                continue;
             }
 
             TimeSlot slot = schedule.getTimeSlot();
@@ -1201,5 +1283,4 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
 
         return conflicts.length() > 0 ? conflicts.toString() : null;
     }
-
 }
