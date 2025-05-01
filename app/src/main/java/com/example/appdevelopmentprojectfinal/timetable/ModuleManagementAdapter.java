@@ -28,16 +28,16 @@ public class ModuleManagementAdapter extends RecyclerView.Adapter<ModuleManageme
     private final OnModuleVisibilityChangedListener listener;
 
     private static final int[] MODULE_COLORS = {
-            Color.parseColor("#FFCDD2"), // Light Red
-            Color.parseColor("#C8E6C9"), // Light Green
-            Color.parseColor("#BBDEFB"), // Light Blue
-            Color.parseColor("#FFE0B2"), // Light Orange
-            Color.parseColor("#E1BEE7"),  // Light Purple
-            Color.parseColor("#F8BBD0"), // Light Pink
-            Color.parseColor("#D7CCC8"), // Light Brown
-            Color.parseColor("#CFD8DC"), // Light Gray
-            Color.parseColor("#B2EBF2"), // Light Cyan
-            Color.parseColor("#B3E5FC")  // Lighter Blue
+            Color.parseColor("#FFCDD2"),
+            Color.parseColor("#C8E6C9"),
+            Color.parseColor("#BBDEFB"),
+            Color.parseColor("#FFE0B2"),
+            Color.parseColor("#E1BEE7"),
+            Color.parseColor("#F8BBD0"),
+            Color.parseColor("#D7CCC8"),
+            Color.parseColor("#CFD8DC"),
+            Color.parseColor("#B2EBF2"),
+            Color.parseColor("#B3E5FC")
     };
 
     public interface OnModuleVisibilityChangedListener {
