@@ -28,7 +28,7 @@ public class RegisterActivity extends AppCompatActivity {
     private static final String TAG = "RegisterActivity";
 
     // UI components
-    private EditText etEmail, etPassword, etFirstName, etLastName, etYear, etDepartment;
+    private EditText etEmail, etPassword, etFirstName, etLastName, etYear, etDepartment, etCourse;
     private Button btnRegister;
     private TextView tvLogin;
     private ProgressBar progressBar;
@@ -53,6 +53,7 @@ public class RegisterActivity extends AppCompatActivity {
         etLastName = findViewById(R.id.etLastName);
         etYear = findViewById(R.id.etYear);
         etDepartment = findViewById(R.id.etDepartment);
+        etCourse = findViewById(R.id.etCourse);
         btnRegister = findViewById(R.id.btnRegister);
         tvLogin = findViewById(R.id.tvLogin);
         progressBar = findViewById(R.id.progressBar);
@@ -73,6 +74,7 @@ public class RegisterActivity extends AppCompatActivity {
         String lastName = etLastName.getText().toString().trim();
         String yearStr = etYear.getText().toString().trim();
         String department = etDepartment.getText().toString().trim();
+        String course = etCourse.getText().toString().trim();
         
         // Validate input
         if (TextUtils.isEmpty(email)) {
@@ -121,6 +123,10 @@ public class RegisterActivity extends AppCompatActivity {
             etDepartment.setError("Department is required");
             return;
         }
+
+        if (TextUtils.isEmpty(course)) {
+            etCourse.setError("Course is required");
+        }
         
         // Show progress
         showLoading(true);
@@ -134,7 +140,7 @@ public class RegisterActivity extends AppCompatActivity {
                     FirebaseUser firebaseUser = firebaseAuth.getCurrentUser();
                     if (firebaseUser != null) {
                         // Create user profile in Firestore
-                        createUserProfile(firebaseUser.getUid(), email, firstName, lastName, year, department);
+                        createUserProfile(firebaseUser.getUid(), email, firstName, lastName, year, department, course);
                     }
                 } else {
                     // If sign in fails, display a message to the user.
@@ -149,7 +155,7 @@ public class RegisterActivity extends AppCompatActivity {
     /**
      * Create user profile in Firestore
      */
-    private void createUserProfile(String uid, String email, String firstName, String lastName, int year, String department) {
+    private void createUserProfile(String uid, String email, String firstName, String lastName, int year, String department, String course) {
         // Create a new user with default values
         User user = new User();
         user.setEmail(email);
@@ -157,12 +163,10 @@ public class RegisterActivity extends AppCompatActivity {
         user.setLastName(lastName);
         user.setYear(year);
         user.setDepartment(department);
-        
-        // Default course: Computer Science & Information Systems
-        user.setCourse("LM051");
+        user.setCourse(course);
         
         // Default initial wallet balance
-        user.setWallet(1000.0);
+        user.setWallet(0.0);
         
         // Default modules for CS students
         List<String> defaultModules = Arrays.asList("CS4084", "CS4106", "CS4116", "CS4187", "CS4457");
