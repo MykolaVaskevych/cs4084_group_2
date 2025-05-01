@@ -1,15 +1,26 @@
 package com.example.appdevelopmentprojectfinal;
 
+import android.app.Dialog;
 import android.content.Intent;
 import android.os.Bundle;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+import android.os.Handler;
+import android.text.Editable;
 import android.text.TextUtils;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
@@ -17,7 +28,10 @@ import android.widget.Toast;
 
 import com.example.appdevelopmentprojectfinal.auth.AuthManager;
 import com.example.appdevelopmentprojectfinal.auth.LoginActivity;
+import com.example.appdevelopmentprojectfinal.model.ModuleSelectionAdapter;
 import com.example.appdevelopmentprojectfinal.model.User;
+import com.example.appdevelopmentprojectfinal.model.UserModulesAdapter;
+import com.example.appdevelopmentprojectfinal.utils.AcademicDatabaseManager;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.firebase.auth.AuthCredential;
 import com.google.firebase.auth.EmailAuthProvider;
@@ -26,8 +40,10 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.text.NumberFormat;
+import java.util.ArrayList;
 import java.util.Currency;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -46,9 +62,9 @@ public class ProfileFragment extends Fragment {
     private TextInputEditText editLastName;
     private TextInputEditText editEmail;
     private TextInputEditText editPhone;
-    private TextInputEditText editDepartment;
-    private TextInputEditText editCourse;
-    private TextInputEditText editYear;
+    private AutoCompleteTextView dropdownDepartment;
+    private AutoCompleteTextView dropdownCourse;
+    private AutoCompleteTextView dropdownYear;
     private TextInputEditText editCurrentPassword;
     private TextInputEditText editNewPassword;
     private TextInputEditText editConfirmPassword;
@@ -59,11 +75,27 @@ public class ProfileFragment extends Fragment {
     private Button btnChangePassword;
     private Button btnTopup;
     private Button btnLogout;
+    private Button btnAddModules;
+    private RecyclerView recyclerUserModules;
     
     // Firebase components
     private FirebaseAuth firebaseAuth;
     private FirebaseFirestore firestore;
     private AuthManager authManager;
+    private AcademicDatabaseManager academicDbManager;
+    
+    // Adapters
+    private UserModulesAdapter userModulesAdapter;
+    
+    // Academic data
+    private List<AcademicDatabaseManager.Department> departments;
+    private List<AcademicDatabaseManager.Course> courses;
+    private List<AcademicDatabaseManager.Year> years;
+    
+    // Selected academic items
+    private AcademicDatabaseManager.Department selectedDepartment;
+    private AcademicDatabaseManager.Course selectedCourse;
+    private AcademicDatabaseManager.Year selectedYear;
     
     // User data
     private User currentUser;
@@ -81,10 +113,19 @@ public class ProfileFragment extends Fragment {
         firebaseAuth = FirebaseAuth.getInstance();
         firestore = FirebaseFirestore.getInstance();
         authManager = AuthManager.getInstance();
+        academicDbManager = AcademicDatabaseManager.getInstance();
+        
+        // Initialize lists
+        departments = new ArrayList<>();
+        courses = new ArrayList<>();
+        years = new ArrayList<>();
         
         // Initialize currency formatter
         currencyFormatter = NumberFormat.getCurrencyInstance(Locale.GERMANY);
         currencyFormatter.setCurrency(Currency.getInstance("EUR"));
+        
+        // Initialize the academic database collections
+        academicDbManager.initializeDatabaseIfNeeded();
     }
 
     @Override
@@ -120,10 +161,19 @@ public class ProfileFragment extends Fragment {
         btnSaveProfile = view.findViewById(R.id.btn_save_profile);
         
         // Academic information fields
-        editDepartment = view.findViewById(R.id.edit_department);
-        editCourse = view.findViewById(R.id.edit_course);
-        editYear = view.findViewById(R.id.edit_year);
+        dropdownDepartment = view.findViewById(R.id.dropdown_department);
+        dropdownCourse = view.findViewById(R.id.dropdown_course);
+        dropdownYear = view.findViewById(R.id.dropdown_year);
         btnSaveAcademic = view.findViewById(R.id.btn_save_academic);
+        
+        // Module fields
+        recyclerUserModules = view.findViewById(R.id.recycler_user_modules);
+        btnAddModules = view.findViewById(R.id.btn_add_modules);
+        
+        // Setup RecyclerView for user modules
+        recyclerUserModules.setLayoutManager(new LinearLayoutManager(getContext()));
+        userModulesAdapter = new UserModulesAdapter(this::removeUserModule);
+        recyclerUserModules.setAdapter(userModulesAdapter);
         
         // Wallet fields
         textWalletBalance = view.findViewById(R.id.text_wallet_balance);
@@ -158,6 +208,37 @@ public class ProfileFragment extends Fragment {
         
         // Logout
         btnLogout.setOnClickListener(v -> logoutUser());
+        
+        // Add modules
+        btnAddModules.setOnClickListener(v -> showModuleSelectionDialog());
+        
+        // Setup dropdown selection listeners
+        setupDropdownListeners();
+    }
+    
+    /**
+     * Set up dropdown menu listeners
+     */
+    private void setupDropdownListeners() {
+        // Department dropdown
+        dropdownDepartment.setOnItemClickListener((parent, view, position, id) -> {
+            selectedDepartment = departments.get(position);
+            loadCourses(selectedDepartment.getId());
+            dropdownCourse.setText("", false);
+            dropdownYear.setText("", false);
+        });
+        
+        // Course dropdown
+        dropdownCourse.setOnItemClickListener((parent, view, position, id) -> {
+            selectedCourse = courses.get(position);
+            loadYears(selectedCourse.getId());
+            dropdownYear.setText("", false);
+        });
+        
+        // Year dropdown
+        dropdownYear.setOnItemClickListener((parent, view, position, id) -> {
+            selectedYear = years.get(position);
+        });
     }
     
     /**
@@ -206,13 +287,155 @@ public class ProfileFragment extends Fragment {
         editEmail.setText(currentUser.getEmail());
         editPhone.setText(currentUser.getPhoneNumber());
         
-        // Set academic information
-        editDepartment.setText(currentUser.getDepartment());
-        editCourse.setText(currentUser.getCourse());
-        editYear.setText(String.valueOf(currentUser.getYear()));
+        // Load departments for dropdowns
+        loadDepartments();
         
         // Set wallet balance
         updateWalletDisplay();
+        
+        // Set user modules
+        if (currentUser.getModules() != null) {
+            userModulesAdapter.setModules(currentUser.getModules());
+            
+            // Load module details for each module code
+            for (String moduleCode : currentUser.getModules()) {
+                loadModuleDetails(moduleCode);
+            }
+        }
+    }
+    
+    /**
+     * Load departments for dropdown
+     */
+    private void loadDepartments() {
+        academicDbManager.loadDepartments(new AcademicDatabaseManager.OnDepartmentsLoadedListener() {
+            @Override
+            public void onDepartmentsLoaded(List<AcademicDatabaseManager.Department> deptList) {
+                if (!isAdded()) return;
+                
+                departments = deptList;
+                
+                // Create adapter for department dropdown
+                ArrayAdapter<AcademicDatabaseManager.Department> adapter = 
+                        new ArrayAdapter<>(getContext(), android.R.layout.simple_dropdown_item_1line, departments);
+                dropdownDepartment.setAdapter(adapter);
+                
+                // Try to match user's department with one from the database
+                if (currentUser.getDepartment() != null) {
+                    for (int i = 0; i < departments.size(); i++) {
+                        if (departments.get(i).getName().equals(currentUser.getDepartment())) {
+                            dropdownDepartment.setText(departments.get(i).toString(), false);
+                            selectedDepartment = departments.get(i);
+                            loadCourses(selectedDepartment.getId());
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            @Override
+            public void onError(String errorMessage) {
+                if (!isAdded()) return;
+                Log.e(TAG, "Error loading departments: " + errorMessage);
+                Toast.makeText(getContext(), "Error loading departments", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+    
+    /**
+     * Load courses for selected department
+     */
+    private void loadCourses(String departmentId) {
+        academicDbManager.loadCourses(departmentId, new AcademicDatabaseManager.OnCoursesLoadedListener() {
+            @Override
+            public void onCoursesLoaded(List<AcademicDatabaseManager.Course> courseList) {
+                if (!isAdded()) return;
+                
+                courses = courseList;
+                
+                // Create adapter for course dropdown
+                ArrayAdapter<AcademicDatabaseManager.Course> adapter = 
+                        new ArrayAdapter<>(getContext(), android.R.layout.simple_dropdown_item_1line, courses);
+                dropdownCourse.setAdapter(adapter);
+                
+                // Try to match user's course with one from the database
+                if (currentUser.getCourse() != null) {
+                    for (int i = 0; i < courses.size(); i++) {
+                        if (courses.get(i).getCode().equals(currentUser.getCourse())) {
+                            dropdownCourse.setText(courses.get(i).toString(), false);
+                            selectedCourse = courses.get(i);
+                            loadYears(selectedCourse.getId());
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            @Override
+            public void onError(String errorMessage) {
+                if (!isAdded()) return;
+                Log.e(TAG, "Error loading courses: " + errorMessage);
+                Toast.makeText(getContext(), "Error loading courses", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+    
+    /**
+     * Load years for selected course
+     */
+    private void loadYears(String courseId) {
+        academicDbManager.loadYears(courseId, new AcademicDatabaseManager.OnYearsLoadedListener() {
+            @Override
+            public void onYearsLoaded(List<AcademicDatabaseManager.Year> yearList) {
+                if (!isAdded()) return;
+                
+                years = yearList;
+                
+                // Create adapter for year dropdown
+                ArrayAdapter<AcademicDatabaseManager.Year> adapter = 
+                        new ArrayAdapter<>(getContext(), android.R.layout.simple_dropdown_item_1line, years);
+                dropdownYear.setAdapter(adapter);
+                
+                // Try to match user's year with one from the database
+                if (currentUser.getYear() > 0) {
+                    for (int i = 0; i < years.size(); i++) {
+                        if (years.get(i).getYearNumber() == currentUser.getYear()) {
+                            dropdownYear.setText(years.get(i).toString(), false);
+                            selectedYear = years.get(i);
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            @Override
+            public void onError(String errorMessage) {
+                if (!isAdded()) return;
+                Log.e(TAG, "Error loading years: " + errorMessage);
+                Toast.makeText(getContext(), "Error loading years", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+    
+    /**
+     * Load module details by code
+     */
+    private void loadModuleDetails(String moduleCode) {
+        academicDbManager.getModuleByCode(moduleCode, new AcademicDatabaseManager.OnModulesLoadedListener() {
+            @Override
+            public void onModulesLoaded(List<AcademicDatabaseManager.Module> modules) {
+                if (!isAdded() || modules.isEmpty()) return;
+                
+                // Update the module data in the adapter
+                userModulesAdapter.updateModuleData(modules.get(0));
+            }
+            
+            @Override
+            public void onError(String errorMessage) {
+                Log.w(TAG, "Error loading module details for " + moduleCode + ": " + errorMessage);
+                // Not showing error to user as this is not critical
+            }
+        });
     }
     
     /**
@@ -251,45 +474,261 @@ public class ProfileFragment extends Fragment {
     private void updateAcademicInfo() {
         if (currentUser == null || !isAdded()) return;
         
-        String department = editDepartment.getText().toString().trim();
-        String course = editCourse.getText().toString().trim();
-        String yearStr = editYear.getText().toString().trim();
-        
         // Validate input
-        if (TextUtils.isEmpty(department)) {
-            editDepartment.setError("Department is required");
+        if (selectedDepartment == null) {
+            dropdownDepartment.setError("Department is required");
             return;
         }
         
-        if (TextUtils.isEmpty(course)) {
-            editCourse.setError("Course is required");
+        if (selectedCourse == null) {
+            dropdownCourse.setError("Course is required");
             return;
         }
         
-        if (TextUtils.isEmpty(yearStr)) {
-            editYear.setError("Year is required");
-            return;
-        }
-        
-        int year;
-        try {
-            year = Integer.parseInt(yearStr);
-            if (year < 1 || year > 6) {
-                editYear.setError("Year must be between 1 and 6");
-                return;
-            }
-        } catch (NumberFormatException e) {
-            editYear.setError("Year must be a number");
+        if (selectedYear == null) {
+            dropdownYear.setError("Year is required");
             return;
         }
         
         // Update user object
-        currentUser.setDepartment(department);
-        currentUser.setCourse(course);
-        currentUser.setYear(year);
+        currentUser.setDepartment(selectedDepartment.getName());
+        currentUser.setCourse(selectedCourse.getCode());
+        currentUser.setYear(selectedYear.getYearNumber());
         
         // Save to Firestore
         saveUserToFirestore("Academic information updated successfully");
+    }
+    
+    /**
+     * Show module selection dialog
+     */
+    private void showModuleSelectionDialog() {
+        if (currentUser == null) return;
+        
+        // Create dialog
+        Dialog dialog = new Dialog(getContext());
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setContentView(R.layout.dialog_module_selection);
+        
+        // Initialize dialog views
+        AutoCompleteTextView dialogDeptDropdown = dialog.findViewById(R.id.dropdown_department);
+        AutoCompleteTextView dialogCourseDropdown = dialog.findViewById(R.id.dropdown_course);
+        AutoCompleteTextView dialogYearDropdown = dialog.findViewById(R.id.dropdown_year);
+        TextInputEditText editSearchModule = dialog.findViewById(R.id.edit_search_module);
+        RecyclerView recyclerModules = dialog.findViewById(R.id.recycler_modules);
+        Button btnCancel = dialog.findViewById(R.id.btn_cancel);
+        Button btnAddSelected = dialog.findViewById(R.id.btn_add_selected);
+        
+        // Module selection adapter
+        ModuleSelectionAdapter moduleSelectionAdapter = new ModuleSelectionAdapter();
+        recyclerModules.setLayoutManager(new LinearLayoutManager(getContext()));
+        recyclerModules.setAdapter(moduleSelectionAdapter);
+        
+        // Set user's current modules
+        moduleSelectionAdapter.setUserModules(currentUser.getModules());
+        
+        // Populate department dropdown with existing data
+        if (!departments.isEmpty()) {
+            ArrayAdapter<AcademicDatabaseManager.Department> deptAdapter = 
+                    new ArrayAdapter<>(getContext(), android.R.layout.simple_dropdown_item_1line, departments);
+            dialogDeptDropdown.setAdapter(deptAdapter);
+            
+            // Set current selection if available
+            if (selectedDepartment != null) {
+                dialogDeptDropdown.setText(selectedDepartment.toString(), false);
+                
+                // Load courses for selected department
+                loadDialogCourses(dialogCourseDropdown, dialogYearDropdown, selectedDepartment.getId());
+            }
+        }
+        
+        // Department selection listener
+        dialogDeptDropdown.setOnItemClickListener((parent, view, position, id) -> {
+            AcademicDatabaseManager.Department department = departments.get(position);
+            loadDialogCourses(dialogCourseDropdown, dialogYearDropdown, department.getId());
+        });
+        
+        // Course selection listener
+        dialogCourseDropdown.setOnItemClickListener((parent, view, position, id) -> {
+            AcademicDatabaseManager.Course course = 
+                    (AcademicDatabaseManager.Course) parent.getItemAtPosition(position);
+            loadDialogYears(dialogYearDropdown, course.getId());
+        });
+        
+        // Year selection listener
+        dialogYearDropdown.setOnItemClickListener((parent, view, position, id) -> {
+            AcademicDatabaseManager.Year year = 
+                    (AcademicDatabaseManager.Year) parent.getItemAtPosition(position);
+            loadModulesForYear(moduleSelectionAdapter, year.getId());
+        });
+        
+        // Search text change listener
+        editSearchModule.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (s.length() >= 2) {
+                    // Search for modules
+                    searchModules(moduleSelectionAdapter, s.toString());
+                }
+            }
+        });
+        
+        // Cancel button
+        btnCancel.setOnClickListener(v -> dialog.dismiss());
+        
+        // Add selected button
+        btnAddSelected.setOnClickListener(v -> {
+            List<String> selectedModules = moduleSelectionAdapter.getSelectedModuleCodes();
+            if (!selectedModules.isEmpty()) {
+                // Add selected modules to user's modules
+                if (currentUser.getModules() == null) {
+                    currentUser.setModules(new ArrayList<>());
+                }
+                
+                // Add new modules
+                for (String moduleCode : selectedModules) {
+                    if (!currentUser.getModules().contains(moduleCode)) {
+                        currentUser.getModules().add(moduleCode);
+                        loadModuleDetails(moduleCode);
+                    }
+                }
+                
+                // Update the adapter
+                userModulesAdapter.setModules(currentUser.getModules());
+                
+                // Save to Firestore
+                saveUserToFirestore("Modules updated successfully");
+                
+                // Dismiss dialog
+                dialog.dismiss();
+            } else {
+                Toast.makeText(getContext(), "No modules selected", Toast.LENGTH_SHORT).show();
+            }
+        });
+        
+        // Show dialog
+        dialog.show();
+    }
+    
+    /**
+     * Load courses for the module selection dialog
+     */
+    private void loadDialogCourses(AutoCompleteTextView courseDropdown, AutoCompleteTextView yearDropdown, String departmentId) {
+        academicDbManager.loadCourses(departmentId, new AcademicDatabaseManager.OnCoursesLoadedListener() {
+            @Override
+            public void onCoursesLoaded(List<AcademicDatabaseManager.Course> courseList) {
+                if (!isAdded()) return;
+                
+                // Create adapter for course dropdown
+                ArrayAdapter<AcademicDatabaseManager.Course> adapter = 
+                        new ArrayAdapter<>(getContext(), android.R.layout.simple_dropdown_item_1line, courseList);
+                courseDropdown.setAdapter(adapter);
+                
+                // Clear year dropdown
+                yearDropdown.setText("", false);
+            }
+            
+            @Override
+            public void onError(String errorMessage) {
+                if (!isAdded()) return;
+                Log.e(TAG, "Error loading courses: " + errorMessage);
+                Toast.makeText(getContext(), "Error loading courses", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+    
+    /**
+     * Load years for the module selection dialog
+     */
+    private void loadDialogYears(AutoCompleteTextView yearDropdown, String courseId) {
+        academicDbManager.loadYears(courseId, new AcademicDatabaseManager.OnYearsLoadedListener() {
+            @Override
+            public void onYearsLoaded(List<AcademicDatabaseManager.Year> yearList) {
+                if (!isAdded()) return;
+                
+                // Create adapter for year dropdown
+                ArrayAdapter<AcademicDatabaseManager.Year> adapter = 
+                        new ArrayAdapter<>(getContext(), android.R.layout.simple_dropdown_item_1line, yearList);
+                yearDropdown.setAdapter(adapter);
+            }
+            
+            @Override
+            public void onError(String errorMessage) {
+                if (!isAdded()) return;
+                Log.e(TAG, "Error loading years: " + errorMessage);
+                Toast.makeText(getContext(), "Error loading years", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+    
+    /**
+     * Load modules for selected year
+     */
+    private void loadModulesForYear(ModuleSelectionAdapter adapter, String yearId) {
+        academicDbManager.loadModulesByYear(yearId, new AcademicDatabaseManager.OnModulesLoadedListener() {
+            @Override
+            public void onModulesLoaded(List<AcademicDatabaseManager.Module> modules) {
+                if (!isAdded()) return;
+                adapter.setModules(modules);
+            }
+            
+            @Override
+            public void onError(String errorMessage) {
+                if (!isAdded()) return;
+                Log.e(TAG, "Error loading modules: " + errorMessage);
+                Toast.makeText(getContext(), "Error loading modules", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+    
+    /**
+     * Search for modules by query
+     */
+    private void searchModules(ModuleSelectionAdapter adapter, String query) {
+        academicDbManager.searchModules(query, new AcademicDatabaseManager.OnModulesLoadedListener() {
+            @Override
+            public void onModulesLoaded(List<AcademicDatabaseManager.Module> modules) {
+                if (!isAdded()) return;
+                adapter.setModules(modules);
+            }
+            
+            @Override
+            public void onError(String errorMessage) {
+                if (!isAdded()) return;
+                Log.e(TAG, "Error searching modules: " + errorMessage);
+                Toast.makeText(getContext(), "Error searching modules", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+    
+    /**
+     * Remove a module from user's modules
+     */
+    private void removeUserModule(String moduleCode) {
+        if (currentUser == null || currentUser.getModules() == null) return;
+        
+        // Show confirmation dialog
+        new AlertDialog.Builder(getContext())
+                .setTitle("Remove Module")
+                .setMessage("Are you sure you want to remove " + moduleCode + " from your modules?")
+                .setPositiveButton("Remove", (dialog, which) -> {
+                    // Remove module
+                    currentUser.getModules().remove(moduleCode);
+                    
+                    // Update adapter
+                    userModulesAdapter.setModules(currentUser.getModules());
+                    
+                    // Save to Firestore
+                    saveUserToFirestore("Module removed successfully");
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
     
     /**
@@ -448,6 +887,7 @@ public class ProfileFragment extends Fragment {
         updates.put("course", currentUser.getCourse());
         updates.put("year", currentUser.getYear());
         updates.put("wallet", currentUser.getWallet());
+        updates.put("modules", currentUser.getModules()); // Add modules to the update
         
         // Update Firestore document
         firestore.collection("users").document(userId)
@@ -480,9 +920,9 @@ public class ProfileFragment extends Fragment {
         btnSaveProfile.setEnabled(enabled);
         
         // Academic information fields
-        editDepartment.setEnabled(enabled);
-        editCourse.setEnabled(enabled);
-        editYear.setEnabled(enabled);
+        dropdownDepartment.setEnabled(enabled);
+        dropdownCourse.setEnabled(enabled);
+        dropdownYear.setEnabled(enabled);
         btnSaveAcademic.setEnabled(enabled);
         
         // Wallet fields

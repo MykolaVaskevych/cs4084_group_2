@@ -5,6 +5,7 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 
 import com.example.appdevelopmentprojectfinal.model.User;
+import com.example.appdevelopmentprojectfinal.utils.AcademicDatabaseManager;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.FirebaseAuth;
@@ -26,6 +27,7 @@ public class AuthManager {
     private static AuthManager instance;
     private final FirebaseAuth firebaseAuth;
     private final FirebaseFirestore firestore;
+    private final AcademicDatabaseManager academicDbManager;
     
     private User currentUser;
     
@@ -43,6 +45,10 @@ public class AuthManager {
     private AuthManager() {
         firebaseAuth = FirebaseAuth.getInstance();
         firestore = FirebaseFirestore.getInstance();
+        academicDbManager = AcademicDatabaseManager.getInstance();
+        
+        // Initialize academic database
+        academicDbManager.initializeDatabaseIfNeeded();
     }
     
     /**
