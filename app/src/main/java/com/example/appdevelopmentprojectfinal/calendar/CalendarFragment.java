@@ -42,6 +42,8 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.datepicker.MaterialDatePicker;
 import com.google.android.material.timepicker.MaterialTimePicker;
 import com.google.android.material.timepicker.TimeFormat;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -108,6 +110,9 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
         // Set default selected date to today
         selectedDate = System.currentTimeMillis();
         
+        // Get or generate user ID
+        initializeUserId();
+        
         // Setup RecyclerView
         setupRecyclerView();
         
@@ -132,10 +137,7 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
         // Update event markers on calendar
         updateCalendarEvents();
         
-        // 获取或生成用户ID
-        initializeUserId();
-        
-        // 设置菜单
+        // Setup menu
         setupMenu();
         
         return view;
@@ -253,6 +255,13 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
         // Initially hide warning icon
         imageViewTitleWarning.setVisibility(View.GONE);
         
+        // Set default selection based on current tab
+        if (currentTab == 0) {
+            radioButtonTodo.setChecked(true);
+        } else {
+            radioButtonEvent.setChecked(true);
+        }
+        
         // Set initial date to selected date
         Calendar selectedCal = Calendar.getInstance();
         selectedCal.setTimeInMillis(selectedDate);
@@ -264,7 +273,7 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
         
         // Format and display initial date and time
         SimpleDateFormat dateFormat = new SimpleDateFormat("MMM dd, yyyy", Locale.getDefault());
-        SimpleDateFormat timeFormat = new SimpleDateFormat("hh:mm a", Locale.getDefault());
+        SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
         textViewDate.setText(dateFormat.format(selectedCal.getTime()));
         textViewTime.setText(timeFormat.format(selectedCal.getTime()));
         
@@ -302,7 +311,7 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
         // Set click listener for time selection - using Material Time Picker
         textViewTime.setOnClickListener(v -> {
             MaterialTimePicker timePicker = new MaterialTimePicker.Builder()
-                .setTimeFormat(TimeFormat.CLOCK_12H)
+                .setTimeFormat(TimeFormat.CLOCK_24H)
                 .setHour(hour[0])
                 .setMinute(minute[0])
                 .setTitleText("Select Time")
@@ -528,7 +537,7 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
         
         // Format date and time
         SimpleDateFormat dateFormat = new SimpleDateFormat("MMM dd, yyyy", Locale.getDefault());
-        SimpleDateFormat timeFormat = new SimpleDateFormat("hh:mm a", Locale.getDefault());
+        SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
         textViewDate.setText(dateFormat.format(event.getDate()));
         textViewTime.setText(timeFormat.format(event.getDate()));
         
@@ -613,7 +622,7 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
         
         // Format and display initial date and time
         SimpleDateFormat dateFormat = new SimpleDateFormat("MMM dd, yyyy", Locale.getDefault());
-        SimpleDateFormat timeFormat = new SimpleDateFormat("hh:mm a", Locale.getDefault());
+        SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
         textViewDate.setText(dateFormat.format(eventCal.getTime()));
         textViewTime.setText(timeFormat.format(eventCal.getTime()));
         
@@ -651,7 +660,7 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
         // Set click listener for time selection - using Material Time Picker
         textViewTime.setOnClickListener(v -> {
             MaterialTimePicker timePicker = new MaterialTimePicker.Builder()
-                .setTimeFormat(TimeFormat.CLOCK_12H)
+                .setTimeFormat(TimeFormat.CLOCK_24H)
                 .setHour(hour[0])
                 .setMinute(minute[0])
                 .setTitleText("Select Time")
@@ -743,20 +752,16 @@ public class CalendarFragment extends Fragment implements EventAdapter.OnEventCl
      * Get or generate a persistent user ID
      */
     private void initializeUserId() {
-        SharedPreferences prefs = requireActivity().getSharedPreferences(PREF_NAME, 0);
-        userId = prefs.getString(PREF_USER_ID, null);
-        
-        if (userId == null) {
-            // No stored user ID, generate a new one
-            userId = UUID.randomUUID().toString();
-            
-            // Store user ID for future use
-            SharedPreferences.Editor editor = prefs.edit();
-            editor.putString(PREF_USER_ID, userId);
-            editor.apply();
+        FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (currentUser != null) {
+            userId = currentUser.getUid();
+            Log.d(TAG, "Using Firebase user ID: " + userId);
+        } else {
+            // Use default account
+            userId = "default_user";
+            Log.d(TAG, "No authenticated user found, using default user ID: " + userId);
+            Toast.makeText(requireContext(), "Using default account", Toast.LENGTH_SHORT).show();
         }
-        
-        Log.d(TAG, "Using user ID: " + userId);
     }
     
     @Override
