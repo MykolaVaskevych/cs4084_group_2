@@ -413,6 +413,7 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                 String lecturer = lecturerInput.getText().toString().trim();
                 String type = typeSpinner.getSelectedItem().toString();
 
+
                 if (code.isEmpty()) {
                     codeInput.setError("Module code is required");
                     return;
@@ -455,6 +456,8 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
 
                 List<TimeSlot> timeSlotList = new ArrayList<>();
                 List<TimeSlot> alternativeSlotsList = new ArrayList<>();
+                boolean hasConflicts = false;
+                StringBuilder conflictMessages = new StringBuilder();
 
                 int childCount = linearLayoutSlots.getChildCount();
 
@@ -467,6 +470,22 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                         LinearLayout slotLayout = slotContainer.findViewWithTag("mainSlotLayout");
                         if (slotLayout != null) {
                             TimeSlot timeSlot = readSlotLayout(slotLayout);
+
+                            // Check for conflicts with the main slot
+                            String conflicts = checkTimeConflicts(timeSlot.getDay(), timeSlot.getStartTime(), timeSlot.getEndTime());
+                            if (conflicts != null) {
+                                hasConflicts = true;
+                                conflictMessages.append("Main (original) slot (")
+                                        .append(timeSlot.getDay())
+                                        .append(" ")
+                                        .append(timeSlot.getStartTime())
+                                        .append("-")
+                                        .append(timeSlot.getEndTime())
+                                        .append(") conflicts with:\n")
+                                        .append(conflicts)
+                                        .append("\n");
+                            }
+
                             timeSlotList.add(timeSlot);
 
                             LinearLayout alternativeSlotsContainer = slotLayout.findViewWithTag("alternativeSlotsContainer");
@@ -476,6 +495,22 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                                     View altChildView = alternativeSlotsContainer.getChildAt(j);
                                     if (altChildView instanceof LinearLayout && "alternativeSlot".equals(altChildView.getTag())) {
                                         TimeSlot altTimeSlot = readSlotLayout((LinearLayout) altChildView);
+
+                                        // Check for conflicts with alternative slots
+                                        conflicts = checkTimeConflicts(altTimeSlot.getDay(), altTimeSlot.getStartTime(), altTimeSlot.getEndTime());
+                                        if (conflicts != null) {
+                                            hasConflicts = true;
+                                            conflictMessages.append("Alternative slot (")
+                                                    .append(altTimeSlot.getDay())
+                                                    .append(" ")
+                                                    .append(altTimeSlot.getStartTime())
+                                                    .append("-")
+                                                    .append(altTimeSlot.getEndTime())
+                                                    .append(") conflicts with:\n")
+                                                    .append(conflicts)
+                                                    .append("\n");
+                                        }
+
                                         alternativeSlotsList.add(altTimeSlot);
                                     }
                                 }
@@ -489,14 +524,32 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                 module.setTimeSlotList(timeSlotList);
                 module.setAlternativeSlots(alternativeSlotsList);
 
-                try {
-                    addModule(module);
-                } catch (JSONException e) {
-                    throw new RuntimeException(e);
+                if (hasConflicts) {
+                    new AlertDialog.Builder(requireContext())
+                            .setTitle("Time Slot Conflict")
+                            .setMessage("This module overlaps with existing modules:\n\n" +
+                                    conflictMessages.toString() +
+                                    "\nAre you sure you want to add it?")
+                                    .setPositiveButton("Add Anyway", (dialogInterface, which) -> {
+                                try {
+                                    addModule(module);
+                                } catch (JSONException e) {
+                                    throw new RuntimeException(e);
+                                }
+                                dialog.dismiss();
+                                SaveModuleDetails(module);
+                            })
+                            .setNegativeButton("Cancel", null)
+                             .show();
+                } else {
+                    try {
+                        addModule(module);
+                    } catch (JSONException e) {
+                        throw new RuntimeException(e);
+                    }
+                    dialog.dismiss();
+                    SaveModuleDetails(module);
                 }
-                dialog.dismiss();
-
-                SaveModuleDetails(module);
             });
         });
 
@@ -1094,6 +1147,7 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
         return isValid;
     }
 
+    // Helpers for checking alternative module location/time (Test-Proof)
     private static class SlotInfo {
         String day;
         String startTime;
@@ -1110,11 +1164,42 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
         }
     }
 
+    // Used for checking module alternative module time overlap
     private boolean timeOverlap(String start1, String end1, String start2, String end2) {
         if (end1.compareTo(start2) <= 0 || end2.compareTo(start1) <= 0) {
             return false;
         }
         return true;
+    }
+
+    private String checkTimeConflicts(String newDay, String newStart, String newEnd) {
+        StringBuilder conflicts = new StringBuilder();
+
+        for (ModuleSchedule schedule : moduleSchedules) {
+            if (!schedule.isVisible()) {
+                continue; // Skipping non-visible modules
+            }
+
+            TimeSlot slot = schedule.getTimeSlot();
+
+            if (slot.getDay().equals(newDay) &&
+                    timeOverlap(slot.getStartTime(), slot.getEndTime(), newStart, newEnd)) {
+
+                Module module = schedule.getModule();
+                conflicts.append(module.getCode())
+                        .append(": ")
+                        .append(module.getName())
+                        .append(" (")
+                        .append(slot.getStartTime())
+                        .append("-")
+                        .append(slot.getEndTime())
+                        .append(" at ")
+                        .append(slot.getLocation())
+                        .append(")\n");
+            }
+        }
+
+        return conflicts.length() > 0 ? conflicts.toString() : null;
     }
 
 }
