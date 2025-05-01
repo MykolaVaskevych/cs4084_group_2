@@ -43,7 +43,7 @@ public class EventAdapter extends RecyclerView.Adapter<EventAdapter.EventViewHol
     public EventAdapter(Context context, List<com.example.appdevelopmentprojectfinal.calendar.Event> events) {
         this.context = context;
         this.events = events;
-        this.dateFormat = new SimpleDateFormat("hh:mm a", Locale.getDefault());
+        this.dateFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
     }
     
     public void setOnEventClickListener(OnEventClickListener listener) {
@@ -73,12 +73,12 @@ public class EventAdapter extends RecyclerView.Adapter<EventAdapter.EventViewHol
         if (event.isTodo()) {
             if (event.isCompleted()) {
                 // Completed TODO - Grey
-                holder.typeIndicator.setBackgroundColor(context.getResources().getColor(android.R.color.darker_gray));
+                holder.typeIndicator.setBackgroundColor(context.getResources().getColor(R.color.gray_500));
                 holder.countdownTextView.setText(context.getString(R.string.completed));
-                holder.countdownTextView.setTextColor(context.getResources().getColor(android.R.color.darker_gray));
+                holder.countdownTextView.setTextColor(context.getResources().getColor(R.color.gray_500));
             } else {
                 // Incomplete TODO - Orange
-                holder.typeIndicator.setBackgroundColor(context.getResources().getColor(android.R.color.holo_orange_light));
+                holder.typeIndicator.setBackgroundColor(context.getResources().getColor(R.color.orange_500));
                 
                 // Calculate and display countdown
                 String countdownText = getDetailedCountdownText(event.getDate());
@@ -104,7 +104,7 @@ public class EventAdapter extends RecyclerView.Adapter<EventAdapter.EventViewHol
                 holder.descriptionTextView.setPaintFlags(holder.descriptionTextView.getPaintFlags() & (~Paint.STRIKE_THRU_TEXT_FLAG));
                 holder.titleTextView.setTextColor(Color.BLACK);
                 holder.descriptionTextView.setTextColor(Color.BLACK);
-                holder.timeTextView.setTextColor(context.getResources().getColor(android.R.color.darker_gray));
+                holder.timeTextView.setTextColor(context.getResources().getColor(R.color.gray_500));
             }
             
             // Setup checkbox listener
@@ -118,16 +118,16 @@ public class EventAdapter extends RecyclerView.Adapter<EventAdapter.EventViewHol
                     holder.titleTextView.setTextColor(Color.GRAY);
                     holder.descriptionTextView.setTextColor(Color.GRAY);
                     holder.timeTextView.setTextColor(Color.GRAY);
-                    holder.typeIndicator.setBackgroundColor(context.getResources().getColor(android.R.color.darker_gray));
+                    holder.typeIndicator.setBackgroundColor(context.getResources().getColor(R.color.gray_500));
                     holder.countdownTextView.setText(context.getString(R.string.completed));
-                    holder.countdownTextView.setTextColor(context.getResources().getColor(android.R.color.darker_gray));
+                    holder.countdownTextView.setTextColor(context.getResources().getColor(R.color.gray_500));
                 } else {
                     holder.titleTextView.setPaintFlags(holder.titleTextView.getPaintFlags() & (~Paint.STRIKE_THRU_TEXT_FLAG));
                     holder.descriptionTextView.setPaintFlags(holder.descriptionTextView.getPaintFlags() & (~Paint.STRIKE_THRU_TEXT_FLAG));
                     holder.titleTextView.setTextColor(Color.BLACK);
                     holder.descriptionTextView.setTextColor(Color.BLACK);
-                    holder.timeTextView.setTextColor(context.getResources().getColor(android.R.color.darker_gray));
-                    holder.typeIndicator.setBackgroundColor(context.getResources().getColor(android.R.color.holo_orange_light));
+                    holder.timeTextView.setTextColor(context.getResources().getColor(R.color.gray_500));
+                    holder.typeIndicator.setBackgroundColor(context.getResources().getColor(R.color.orange_500));
                     
                     // Calculate and display countdown
                     String countdownText = getDetailedCountdownText(event.getDate());
@@ -144,7 +144,7 @@ public class EventAdapter extends RecyclerView.Adapter<EventAdapter.EventViewHol
             });
         } else {
             // Event - Red
-            holder.typeIndicator.setBackgroundColor(context.getResources().getColor(android.R.color.holo_red_light));
+            holder.typeIndicator.setBackgroundColor(context.getResources().getColor(R.color.red_500));
             
             // Hide checkbox for events
             holder.completedCheckBox.setVisibility(View.GONE);
@@ -248,7 +248,7 @@ public class EventAdapter extends RecyclerView.Adapter<EventAdapter.EventViewHol
         // Check if event is today but already expired
         if (eventDate.getTime() < System.currentTimeMillis()) {
             // Expired events - Gray
-            textView.setTextColor(context.getResources().getColor(android.R.color.darker_gray));
+            textView.setTextColor(context.getResources().getColor(R.color.gray_500));
             return;
         }
         
@@ -261,16 +261,16 @@ public class EventAdapter extends RecyclerView.Adapter<EventAdapter.EventViewHol
         
         if (days == 0 && hours <= 3) {
             // Within 3 hours - Red (urgent)
-            textView.setTextColor(Color.RED);
+            textView.setTextColor(context.getResources().getColor(R.color.red_500));
         } else if (days == 0) {
             // Within today - Orange
-            textView.setTextColor(context.getResources().getColor(android.R.color.holo_orange_dark));
+            textView.setTextColor(context.getResources().getColor(R.color.orange_500));
         } else if (days <= 2) {
             // Within 2 days - Light orange
-            textView.setTextColor(context.getResources().getColor(android.R.color.holo_orange_light));
+            textView.setTextColor(context.getResources().getColor(R.color.orange_300));
         } else {
             // More than 2 days - Blue
-            textView.setTextColor(context.getResources().getColor(android.R.color.holo_blue_dark));
+            textView.setTextColor(context.getResources().getColor(R.color.blue_500));
         }
     }
     
