@@ -97,8 +97,13 @@ public class StoreFragment extends Fragment {
 
     // Setup tabs for viewpager
     private void setUpViewPager() {
+        if (!isAdded()) {
+            return;
+        }
+        
         // Create adapter for the viewpager
-        StoreTabAdapter adapter = new StoreTabAdapter(getChildFragmentManager(), getLifecycle());
+        //StoreTabAdapter adapter = new StoreTabAdapter(getChildFragmentManager(), getLifecycle());
+        StoreTabAdapter adapter = new StoreTabAdapter(requireActivity().getSupportFragmentManager(), getLifecycle());
         viewPager.setAdapter(adapter);
 
         // Connect TabLayout with ViewPager
