@@ -42,6 +42,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import android.graphics.Typeface;
+import android.text.Editable;
+import android.text.TextWatcher;
+import java.util.HashSet;
+import java.util.Set;
+
 import android.content.Context;
 
 public class TimetableFragment extends Fragment implements ModuleManagementAdapter.OnModuleVisibilityChangedListener {
@@ -63,16 +69,16 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
     private static final String[] DAYS = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"};
 
     private static final int[] MODULE_COLORS = {
-            Color.parseColor("#FFCDD2"), // Light Red
-            Color.parseColor("#C8E6C9"), // Light Green
-            Color.parseColor("#BBDEFB"), // Light Blue
-            Color.parseColor("#FFE0B2"), // Light Orange
-            Color.parseColor("#E1BEE7"),  // Light Purple
-            Color.parseColor("#F8BBD0"), // Light Pink
-            Color.parseColor("#D7CCC8"), // Light Brown
-            Color.parseColor("#CFD8DC"), // Light Gray
-            Color.parseColor("#B2EBF2"), // Light Cyan
-            Color.parseColor("#B3E5FC")  // Lighter Blue
+            Color.parseColor("#FFCDD2"),
+            Color.parseColor("#C8E6C9"),
+            Color.parseColor("#BBDEFB"),
+            Color.parseColor("#FFE0B2"),
+            Color.parseColor("#E1BEE7"),
+            Color.parseColor("#F8BBD0"),
+            Color.parseColor("#D7CCC8"),
+            Color.parseColor("#CFD8DC"),
+            Color.parseColor("#B2EBF2"),
+            Color.parseColor("#B3E5FC")
     };
 
     public TimetableFragment() {
@@ -144,7 +150,7 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
 
                 LinearLayout slotContainer = new LinearLayout(requireContext());
                 slotContainer.setOrientation(LinearLayout.VERTICAL);
-                slotContainer.setTag("slotContainer"); // Add tag to identify slot containers
+                slotContainer.setTag("slotContainer");
 
                 Spinner daySpinner = new Spinner(requireContext());
                 LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(
@@ -315,9 +321,76 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                     altEndTimeSpinner.setTag("altEndTimeSpinner");
 
                     altSlotLayout.addView(altEndTimeSpinner);
+    // Test-proofed alternative slot location
+                    TextView locationLabel = new TextView(requireContext());
+                    locationLabel.setTextColor(Color.parseColor("#FF0000"));
+                    altSlotLayout.addView(locationLabel);
 
                     EditText altInputLocation = new EditText(requireContext());
                     altInputLocation.setHint("Location");
+
+                    altInputLocation.addTextChangedListener(new TextWatcher() {
+                        @Override
+                        public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                        }
+
+                        @Override
+                        public void onTextChanged(CharSequence s, int start, int before, int count) {
+                        }
+
+                        @Override
+                        public void afterTextChanged(Editable s) {
+                            if (s.toString().trim().isEmpty()) {
+                                altInputLocation.setError("Location is required for alternative slot");
+                            } else {
+                                boolean isDuplicate = false;
+                                LinearLayout mainSlotLayout = linearLayoutSlots.findViewWithTag("mainSlotLayout");
+                                if (mainSlotLayout != null) {
+                                    for (int i = 0; i < mainSlotLayout.getChildCount(); i++) {
+                                        View view = mainSlotLayout.getChildAt(i);
+                                        if (view instanceof EditText && "Location".equals(((EditText) view).getHint())) {
+                                            String mainLocation = ((EditText) view).getText().toString().trim();
+                                            if (!mainLocation.isEmpty() && mainLocation.equals(s.toString().trim())) {
+//                                                altInputLocation.setError("This location is already used in another place slot");
+                                                // TODO:
+                                                isDuplicate = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (!isDuplicate) {
+                                    LinearLayout alternativeSlotsContainer = (LinearLayout) altSlotLayout.getParent();
+                                    if (alternativeSlotsContainer != null) {
+                                        for (int i = 0; i < alternativeSlotsContainer.getChildCount(); i++) {
+                                            View childView = alternativeSlotsContainer.getChildAt(i);
+                                            if (childView == altSlotLayout) continue;
+
+                                            if (childView instanceof LinearLayout && "alternativeSlot".equals(childView.getTag())) {
+                                                LinearLayout otherAltSlot = (LinearLayout) childView;
+
+                                                for (int j = 0; j < otherAltSlot.getChildCount(); j++) {
+                                                    View otherView = otherAltSlot.getChildAt(j);
+                                                    if (otherView instanceof EditText && "Location".equals(((EditText) otherView).getHint())) {
+                                                        String otherLocation = ((EditText) otherView).getText().toString().trim();
+                                                        if (!otherLocation.isEmpty() && otherLocation.equals(s.toString().trim())) {
+                                                            altInputLocation.setError("This location is already used in another alternative slot");
+                                                            isDuplicate = true;
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+
+                                                if (isDuplicate) break;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+
                     altSlotLayout.addView(altInputLocation);
 
                     Button btnRemoveAltSlot = new Button(requireContext());
@@ -340,6 +413,7 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                 String lecturer = lecturerInput.getText().toString().trim();
                 String type = typeSpinner.getSelectedItem().toString();
 
+
                 if (code.isEmpty()) {
                     codeInput.setError("Module code is required");
                     return;
@@ -355,13 +429,11 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                     return;
                 }
 
-                // Check if at least one time slot is added
                 if (linearLayoutSlots.getChildCount() == 0) {
                     Toast.makeText(requireContext(), "Add at least one time slot", Toast.LENGTH_SHORT).show();
                     return;
                 }
 
-                // Validate code format (e.g., CS1234)
                 if (!code.matches("^[A-Za-z]{2}[0-9]{4}$")) {
                     codeInput.setError("Invalid code format. Use 2 letters and 4 numbers. E.g., use CS1234 or ET4011.");
                     return;
@@ -384,6 +456,8 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
 
                 List<TimeSlot> timeSlotList = new ArrayList<>();
                 List<TimeSlot> alternativeSlotsList = new ArrayList<>();
+                boolean hasConflicts = false;
+                StringBuilder conflictMessages = new StringBuilder();
 
                 int childCount = linearLayoutSlots.getChildCount();
 
@@ -396,6 +470,22 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                         LinearLayout slotLayout = slotContainer.findViewWithTag("mainSlotLayout");
                         if (slotLayout != null) {
                             TimeSlot timeSlot = readSlotLayout(slotLayout);
+
+                            // Check for conflicts with the main slot
+                            String conflicts = checkTimeConflicts(timeSlot.getDay(), timeSlot.getStartTime(), timeSlot.getEndTime());
+                            if (conflicts != null) {
+                                hasConflicts = true;
+                                conflictMessages.append("Main (original) slot (")
+                                        .append(timeSlot.getDay())
+                                        .append(" ")
+                                        .append(timeSlot.getStartTime())
+                                        .append("-")
+                                        .append(timeSlot.getEndTime())
+                                        .append(") conflicts with:\n")
+                                        .append(conflicts)
+                                        .append("\n");
+                            }
+
                             timeSlotList.add(timeSlot);
 
                             LinearLayout alternativeSlotsContainer = slotLayout.findViewWithTag("alternativeSlotsContainer");
@@ -405,6 +495,22 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                                     View altChildView = alternativeSlotsContainer.getChildAt(j);
                                     if (altChildView instanceof LinearLayout && "alternativeSlot".equals(altChildView.getTag())) {
                                         TimeSlot altTimeSlot = readSlotLayout((LinearLayout) altChildView);
+
+                                        // Check for conflicts with alternative slots
+                                        conflicts = checkTimeConflicts(altTimeSlot.getDay(), altTimeSlot.getStartTime(), altTimeSlot.getEndTime());
+                                        if (conflicts != null) {
+                                            hasConflicts = true;
+                                            conflictMessages.append("Alternative slot (")
+                                                    .append(altTimeSlot.getDay())
+                                                    .append(" ")
+                                                    .append(altTimeSlot.getStartTime())
+                                                    .append("-")
+                                                    .append(altTimeSlot.getEndTime())
+                                                    .append(") conflicts with:\n")
+                                                    .append(conflicts)
+                                                    .append("\n");
+                                        }
+
                                         alternativeSlotsList.add(altTimeSlot);
                                     }
                                 }
@@ -418,14 +524,32 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                 module.setTimeSlotList(timeSlotList);
                 module.setAlternativeSlots(alternativeSlotsList);
 
-                try {
-                    addModule(module);
-                } catch (JSONException e) {
-                    throw new RuntimeException(e);
+                if (hasConflicts) {
+                    new AlertDialog.Builder(requireContext())
+                            .setTitle("Time Slot Conflict")
+                            .setMessage("This module overlaps with existing modules:\n\n" +
+                                    conflictMessages.toString() +
+                                    "\nAre you sure you want to add it?")
+                                    .setPositiveButton("Add Anyway", (dialogInterface, which) -> {
+                                try {
+                                    addModule(module);
+                                } catch (JSONException e) {
+                                    throw new RuntimeException(e);
+                                }
+                                dialog.dismiss();
+                                SaveModuleDetails(module);
+                            })
+                            .setNegativeButton("Cancel", null)
+                             .show();
+                } else {
+                    try {
+                        addModule(module);
+                    } catch (JSONException e) {
+                        throw new RuntimeException(e);
+                    }
+                    dialog.dismiss();
+                    SaveModuleDetails(module);
                 }
-                dialog.dismiss();
-
-                SaveModuleDetails(module);
             });
         });
 
@@ -896,6 +1020,8 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
     private boolean validateTimeSlots() {
         boolean isValid = true;
 
+        List<SlotInfo> allSlots = new ArrayList<>();
+
         for (int i = 0; i < linearLayoutSlots.getChildCount(); i++) {
             View childView = linearLayoutSlots.getChildAt(i);
 
@@ -905,25 +1031,36 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
 
                 if (slotLayout != null) {
                     EditText locationField = null;
+                    String day = "";
+                    String startTime = "";
+                    String endTime = "";
+
                     for (int j = 0; j < slotLayout.getChildCount(); j++) {
                         View view = slotLayout.getChildAt(j);
                         if (view instanceof EditText && "Location".equals(((EditText) view).getHint())) {
                             locationField = (EditText) view;
-                            break;
-                      }
+                        } else if (view instanceof Spinner) {
+                            if (view.getTag() == null) {
+                                day = ((Spinner) view).getSelectedItem().toString();
+                            } else if ("startTimeSpinner".equals(view.getTag())) {
+                                startTime = ((Spinner) view).getSelectedItem().toString();
+                            } else if ("endTimeSpinner".equals(view.getTag())) {
+                                endTime = ((Spinner) view).getSelectedItem().toString();
+                            }
+                        }
                     }
-                    if (locationField != null && locationField.getText().toString().trim().isEmpty()) {
-                        locationField.setError("Location is required");
-                        isValid = false;
+
+                    if (locationField != null) {
+                        String location = locationField.getText().toString().trim();
+                        if (location.isEmpty()) {
+                            locationField.setError("Location is required");
+                            isValid = false;
+                        } else {
+                            allSlots.add(new SlotInfo(day, startTime, endTime, location, locationField));
+                        }
                     }
 
-                    Spinner startTimeSpinner = slotLayout.findViewWithTag("startTimeSpinner");
-                    Spinner endTimeSpinner = slotLayout.findViewWithTag("endTimeSpinner");
-
-                    if (startTimeSpinner != null && endTimeSpinner != null) {
-                        String startTime = startTimeSpinner.getSelectedItem().toString();
-                        String endTime = endTimeSpinner.getSelectedItem().toString();
-
+                    if (!day.isEmpty() && !startTime.isEmpty() && !endTime.isEmpty()) {
                         if (startTime.compareTo(endTime) >= 0) {
                             Toast.makeText(requireContext(),
                                     "End time must be after start time",
@@ -931,10 +1068,138 @@ public class TimetableFragment extends Fragment implements ModuleManagementAdapt
                             isValid = false;
                         }
                     }
+
+                    LinearLayout alternativeSlotsContainer = slotLayout.findViewWithTag("alternativeSlotsContainer");
+                    if (alternativeSlotsContainer != null && alternativeSlotsContainer.getChildCount() > 0) {
+                        for (int j = 0; j < alternativeSlotsContainer.getChildCount(); j++) {
+                            View altView = alternativeSlotsContainer.getChildAt(j);
+                            if (altView instanceof LinearLayout && "alternativeSlot".equals(altView.getTag())) {
+                                LinearLayout altSlotLayout = (LinearLayout) altView;
+
+                                EditText altLocationField = null;
+                                String altDay = "";
+                                String altStartTime = "";
+                                String altEndTime = "";
+
+                                for (int k = 0; k < altSlotLayout.getChildCount(); k++) {
+                                    View altInputView = altSlotLayout.getChildAt(k);
+                                    if (altInputView instanceof EditText && "Location".equals(((EditText) altInputView).getHint())) {
+                                        altLocationField = (EditText) altInputView;
+                                    } else if (altInputView instanceof Spinner) {
+                                        if (altInputView.getTag() == null) {
+                                            altDay = ((Spinner) altInputView).getSelectedItem().toString();
+                                        } else if ("altStartTimeSpinner".equals(altInputView.getTag())) {
+                                            altStartTime = ((Spinner) altInputView).getSelectedItem().toString();
+                                        } else if ("altEndTimeSpinner".equals(altInputView.getTag())) {
+                                            altEndTime = ((Spinner) altInputView).getSelectedItem().toString();
+                                        }
+                                    }
+                                }
+
+                                if (altLocationField != null) {
+                                    String altLocation = altLocationField.getText().toString().trim();
+                                    if (altLocation.isEmpty()) {
+                                        altLocationField.setError("Location required for alternative slot");
+                                        isValid = false;
+                                    } else {
+                                        allSlots.add(new SlotInfo(altDay, altStartTime, altEndTime, altLocation, altLocationField));
+                                    }
+                                } else {
+                                    Toast.makeText(requireContext(),
+                                            "Alternative slot is missing location field",
+                                            Toast.LENGTH_SHORT).show();
+                                    isValid = false;
+                                }
+
+                                if (!altDay.isEmpty() && !altStartTime.isEmpty() && !altEndTime.isEmpty()) {
+                                    if (altStartTime.compareTo(altEndTime) >= 0) {
+                                        Toast.makeText(requireContext(),
+                                                "Alternative slot end time have to be after start time",
+                                                Toast.LENGTH_SHORT).show();
+                                        isValid = false;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for (int i = 0; i < allSlots.size(); i++) {
+            SlotInfo slot1 = allSlots.get(i);
+
+            for (int j = i + 1; j < allSlots.size(); j++) {
+                SlotInfo slot2 = allSlots.get(j);
+
+                if (slot1.day.equals(slot2.day) &&
+                        timeOverlap(slot1.startTime, slot1.endTime, slot2.startTime, slot2.endTime)) {
+
+                    if (slot1.location.equals(slot2.location)) {
+                        slot1.locationField.setError("Cannot use same location for overlapping time slots");
+                        slot2.locationField.setError("Cannot use same location for overlapping time slots");
+                        isValid = false;
+                    }
                 }
             }
         }
 
         return isValid;
     }
+
+    // Helpers for checking alternative module location/time (Test-Proof)
+    private static class SlotInfo {
+        String day;
+        String startTime;
+        String endTime;
+        String location;
+        EditText locationField;
+
+        SlotInfo(String day, String startTime, String endTime, String location, EditText locationField) {
+            this.day = day;
+            this.startTime = startTime;
+            this.endTime = endTime;
+            this.location = location;
+            this.locationField = locationField;
+        }
+    }
+
+    // Used for checking module alternative module time overlap
+    private boolean timeOverlap(String start1, String end1, String start2, String end2) {
+        if (end1.compareTo(start2) <= 0 || end2.compareTo(start1) <= 0) {
+            return false;
+        }
+        return true;
+    }
+
+    private String checkTimeConflicts(String newDay, String newStart, String newEnd) {
+        StringBuilder conflicts = new StringBuilder();
+
+        for (ModuleSchedule schedule : moduleSchedules) {
+            if (!schedule.isVisible()) {
+                continue; // Skipping non-visible modules
+            }
+
+            TimeSlot slot = schedule.getTimeSlot();
+
+            if (slot.getDay().equals(newDay) &&
+                    timeOverlap(slot.getStartTime(), slot.getEndTime(), newStart, newEnd)) {
+
+                Module module = schedule.getModule();
+                conflicts.append(module.getCode())
+                        .append(": ")
+                        .append(module.getName())
+                        .append(" (")
+                        .append(slot.getStartTime())
+                        .append("-")
+                        .append(slot.getEndTime())
+                        .append(" at ")
+                        .append(slot.getLocation())
+                        .append(")\n");
+            }
+        }
+
+        return conflicts.length() > 0 ? conflicts.toString() : null;
+    }
+
 }
