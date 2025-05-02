@@ -6,25 +6,10 @@
 - Email/password login
 - User registration
 
-## Home Page
-
-The Home Page provides quick access to your upcoming academic schedule and course recommendations:
-
-### Features
-- **Upcoming Events & Modules**
-  - Shows your next scheduled event
-  - Displays your next upcoming module
-  - Click on any item to view full details
-
-- **Recommended Course**
-  - Automatically suggests the highest-rated course you don't own
-  - Only shows courses with a rating of 3.5 stars or higher
-  - Updates based on your owned courses
-
-### Navigation
-- Access the Home Page from the bottom navigation bar
-- Data loads automatically when the app starts
-- Refresh by navigating back to the Home Page
+### Home Page
+- Quick access to all features
+- Navigation menu
+- User profile overview
 
 ### Profile Management
 - User profile customization
