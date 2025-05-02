@@ -251,6 +251,13 @@
                             android:layout_width="match_parent"
                             android:layout_height="match_parent"
                             android:layout_gravity="center" />
+                            
+                        <WebView
+                            android:id="@+id/webViewYoutube"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:layout_gravity="center"
+                            android:visibility="gone" />
 
                         <ImageView
                             android:id="@+id/ivPlayButton"
@@ -317,6 +324,14 @@
                 android:textAlignment="center"
                 android:textStyle="italic"
                 android:visibility="gone" />
+                
+            <Button
+                android:id="@+id/btnAddReview"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/add_review"
+                android:layout_marginTop="8dp" />
 
             <View
                 android:layout_width="match_parent"
@@ -351,6 +366,21 @@
         </LinearLayout>
 
     </androidx.core.widget.NestedScrollView>
+
+    <!-- Loading overlay -->
+    <FrameLayout
+        android:id="@+id/loadingView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#66000000"
+        android:visibility="gone">
+        
+        <ProgressBar
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center" />
+            
+    </FrameLayout>
 
     <LinearLayout
         android:id="@+id/bottomActions"

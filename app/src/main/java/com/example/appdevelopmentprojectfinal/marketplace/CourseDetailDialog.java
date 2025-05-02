@@ -9,7 +9,9 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.WebView;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -17,6 +19,8 @@ import android.widget.RatingBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.VideoView;
+
+import com.example.appdevelopmentprojectfinal.utils.YouTubeHelper;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -28,16 +32,22 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.appdevelopmentprojectfinal.R;
 import com.example.appdevelopmentprojectfinal.model.Course;
 import com.example.appdevelopmentprojectfinal.model.Module;
-import com.example.appdevelopmentprojectfinal.model.User;
-import com.example.appdevelopmentprojectfinal.utils.DataManager;
 import com.google.android.material.appbar.CollapsingToolbarLayout;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FieldValue;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Currency;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public class CourseDetailDialog extends DialogFragment {
 
@@ -70,6 +80,7 @@ public class CourseDetailDialog extends DialogFragment {
     private TextView tvExpandedContent;
     private TextView tvVideoTitle;
     private VideoView videoView;
+    private WebView webViewYoutube;
     private ImageView ivPlayButton;
     private FrameLayout videoContainer;
     private ImageView btnCollapsePreview;
@@ -79,10 +90,14 @@ public class CourseDetailDialog extends DialogFragment {
     private RecyclerView rvRelatedCourses;
     private Button btnCancel;
     private Button btnBuy;
+    private Button btnAddReview;
     private View loadingView;
 
     private ReviewAdapter reviewAdapter;
     private RelatedCourseAdapter relatedCourseAdapter;
+    
+    // Firestore reference
+    private FirebaseFirestore db = FirebaseFirestore.getInstance();
 
     public static CourseDetailDialog newInstance(String courseId) {
         Log.d(TAG, "Creating new instance with courseId: " + courseId);
@@ -159,6 +174,7 @@ public class CourseDetailDialog extends DialogFragment {
         tvExpandedContent = view.findViewById(R.id.tvExpandedContent);
         tvVideoTitle = view.findViewById(R.id.tvVideoTitle);
         videoView = view.findViewById(R.id.videoView);
+        webViewYoutube = view.findViewById(R.id.webViewYoutube);
         ivPlayButton = view.findViewById(R.id.ivPlayButton);
         videoContainer = view.findViewById(R.id.videoContainer);
         btnCollapsePreview = view.findViewById(R.id.btnCollapsePreview);
@@ -168,6 +184,7 @@ public class CourseDetailDialog extends DialogFragment {
         rvRelatedCourses = view.findViewById(R.id.rvRelatedCourses);
         btnCancel = view.findViewById(R.id.btnCancel);
         btnBuy = view.findViewById(R.id.btnBuy);
+        btnAddReview = view.findViewById(R.id.btnAddReview);
         loadingView = view.findViewById(R.id.loadingView);
         
         setupPreviewExpansion();
@@ -178,32 +195,47 @@ public class CourseDetailDialog extends DialogFragment {
         Log.i(TAG, "Loading course details for courseId: " + courseId);
         showLoading(true);
         
-        MarketplaceFirestoreManager.getInstance().loadCourseById(courseId, new MarketplaceFirestoreManager.OnCourseLoadedListener() {
-            @Override
-            public void onCourseLoaded(Course loadedCourse) {
-                Log.i(TAG, "Course loaded successfully: " + loadedCourse.getName());
-                course = loadedCourse;
-                displayCourseDetails();
-                setupButtons();
-                showLoading(false);
-            }
-
-            @Override
-            public void onError(String errorMessage) {
-                Log.e(TAG, "Error loading course: " + errorMessage);
+        db.collection("marketplace").document(courseId).get()
+            .addOnSuccessListener(documentSnapshot -> {
+                if (documentSnapshot.exists()) {
+                    course = documentSnapshot.toObject(Course.class);
+                    if (course != null) {
+                        course.setId(documentSnapshot.getId());
+                        Log.i(TAG, "Course loaded successfully: " + course.getName());
+                        displayCourseDetails();
+                        setupButtons();
+                        showLoading(false);
+                    } else {
+                        Log.e(TAG, "Error parsing course data");
+                        Toast.makeText(requireContext(), getString(R.string.course_not_found), Toast.LENGTH_SHORT).show();
+                        showLoading(false);
+                        dismiss();
+                    }
+                } else {
+                    Log.e(TAG, "Course document not found");
+                    Toast.makeText(requireContext(), getString(R.string.course_not_found), Toast.LENGTH_SHORT).show();
+                    showLoading(false);
+                    dismiss();
+                }
+            })
+            .addOnFailureListener(e -> {
+                Log.e(TAG, "Error loading course: " + e.getMessage());
                 Toast.makeText(requireContext(), getString(R.string.course_not_found), Toast.LENGTH_SHORT).show();
                 showLoading(false);
                 dismiss();
-            }
-        });
+            });
     }
     
     private void showLoading(boolean isLoading) {
         Log.v(TAG, "Loading state changed: " + isLoading);
-        if (isLoading) {
-            loadingView.setVisibility(View.VISIBLE);
+        if (loadingView != null) {
+            if (isLoading) {
+                loadingView.setVisibility(View.VISIBLE);
+            } else {
+                loadingView.setVisibility(View.GONE);
+            }
         } else {
-            loadingView.setVisibility(View.GONE);
+            Log.e(TAG, "loadingView is null in showLoading method");
         }
     }
 
@@ -246,14 +278,33 @@ public class CourseDetailDialog extends DialogFragment {
     }
     
     private void setModuleInfo() {
-        Module module = DataManager.getInstance().getModuleByCode(course.getRelatedModule());
-        if (module != null) {
-            String moduleInfo = String.format("%s: %s", module.getCode(), module.getName());
-            Log.v(TAG, "Setting module info: " + moduleInfo);
-            tvModuleInfo.setText(moduleInfo);
+        // Get module info from Firestore
+        if (course.getRelatedModule() != null) {
+            db.collection("modules").whereEqualTo("code", course.getRelatedModule())
+                .get()
+                .addOnSuccessListener(queryDocumentSnapshots -> {
+                    if (!queryDocumentSnapshots.isEmpty()) {
+                        DocumentSnapshot doc = queryDocumentSnapshots.getDocuments().get(0);
+                        String code = doc.getString("code");
+                        String name = doc.getString("name");
+                        if (code != null && name != null) {
+                            String moduleInfo = String.format("%s: %s", code, name);
+                            Log.v(TAG, "Setting module info: " + moduleInfo);
+                            tvModuleInfo.setText(moduleInfo);
+                        } else {
+                            tvModuleInfo.setText(course.getRelatedModule());
+                        }
+                    } else {
+                        Log.v(TAG, "Module not found, using module code only: " + course.getRelatedModule());
+                        tvModuleInfo.setText(course.getRelatedModule());
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Error fetching module info: " + e.getMessage());
+                    tvModuleInfo.setText(course.getRelatedModule());
+                });
         } else {
-            Log.v(TAG, "Module not found, using module code only: " + course.getRelatedModule());
-            tvModuleInfo.setText(course.getRelatedModule());
+            tvModuleInfo.setText("General");
         }
     }
     
@@ -386,43 +437,45 @@ public class CourseDetailDialog extends DialogFragment {
         Log.i(TAG, "Loading related courses for module: " + course.getRelatedModule());
         showRelatedCoursesLoading(true);
         
-        MarketplaceFirestoreManager.getInstance().loadCoursesByModule(course.getRelatedModule(), new MarketplaceFirestoreManager.OnCoursesLoadedListener() {
-            @Override
-            public void onCoursesLoaded(List<Course> courses) {
-                Log.d(TAG, "Loaded " + courses.size() + " courses for related module");
-                List<Course> relatedCourses = new ArrayList<>();
-                for (Course relatedCourse : courses) {
-                    if (!relatedCourse.getId().equals(course.getId())) {
-                        relatedCourses.add(relatedCourse);
-                        Log.v(TAG, "Added related course: " + relatedCourse.getName());
+        db.collection("marketplace")
+            .whereEqualTo("relatedModule", course.getRelatedModule())
+            .get()
+            .addOnSuccessListener(queryDocumentSnapshots -> {
+                List<Course> courses = new ArrayList<>();
+                for (DocumentSnapshot doc : queryDocumentSnapshots.getDocuments()) {
+                    Course relatedCourse = doc.toObject(Course.class);
+                    if (relatedCourse != null) {
+                        relatedCourse.setId(doc.getId());
+                        if (!relatedCourse.getId().equals(courseId)) {
+                            courses.add(relatedCourse);
+                            Log.v(TAG, "Added related course: " + relatedCourse.getName());
+                        }
                     }
                 }
                 
-                if (relatedCourses.isEmpty()) {
-                    Log.w(TAG, "No related courses found after filtering");
+                if (courses.isEmpty()) {
+                    Log.w(TAG, "No related courses found");
                     rvRelatedCourses.setVisibility(View.GONE);
                 } else {
-                    Log.i(TAG, "Displaying " + relatedCourses.size() + " related courses");
-                    relatedCourseAdapter = new RelatedCourseAdapter(relatedCourses, CourseDetailDialog.this::showRelatedCourseDetail);
+                    Log.i(TAG, "Displaying " + courses.size() + " related courses");
+                    relatedCourseAdapter = new RelatedCourseAdapter(courses, CourseDetailDialog.this::showRelatedCourseDetail);
                     rvRelatedCourses.setAdapter(relatedCourseAdapter);
                     rvRelatedCourses.setVisibility(View.VISIBLE);
                 }
                 
                 showRelatedCoursesLoading(false);
-            }
-
-            @Override
-            public void onError(String errorMessage) {
-                Log.e(TAG, "Error loading related courses: " + errorMessage);
+            })
+            .addOnFailureListener(e -> {
+                Log.e(TAG, "Error loading related courses: " + e.getMessage());
                 rvRelatedCourses.setVisibility(View.GONE);
                 showRelatedCoursesLoading(false);
-            }
-        });
+            });
     }
     
     private void showRelatedCoursesLoading(boolean isLoading) {
         Log.v(TAG, "Related courses loading state: " + isLoading);
-        // Could add a specific loading indicator for related courses if needed
+        // Placeholder for future implementation of related courses loading indicator
+        // This method is called in loadRelatedCourses() but doesn't affect the UI currently
     }
     
     private void configureBuyButton() {
@@ -435,18 +488,36 @@ public class CourseDetailDialog extends DialogFragment {
         btnBuy.setText(getString(R.string.buy_price, formattedPrice));
         btnBuy.setEnabled(true);
         
-        User currentUser = DataManager.getInstance().getCurrentUser();
-        if (currentUser != null) {
-            if (currentUser.ownsModule(course.getId())) {
+        // Check Firebase user first
+        FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (firebaseUser == null) {
+            Log.w(TAG, "Firebase user is null, showing login required message");
+            btnBuy.setText(getString(R.string.login_to_buy));
+            btnBuy.setEnabled(false);
+            return;
+        }
+        
+        // Cache formatted strings for use in callback
+        final String buyButtonText = getString(R.string.buy_price, formattedPrice);
+        final String ownedText = getString(R.string.owned);
+        
+        // Check if the user owns this course
+        checkIfUserOwnsCourse(firebaseUser.getUid(), course.getId(), isOwned -> {
+            if (!isAdded() || getContext() == null) {
+                Log.w(TAG, "Fragment detached, skipping UI update");
+                return;
+            }
+            
+            if (isOwned) {
                 Log.i(TAG, "User already owns this course, disabling buy button");
-                btnBuy.setText(getString(R.string.owned));
+                btnBuy.setText(ownedText);
                 btnBuy.setEnabled(false);
             } else {
                 Log.v(TAG, "Course is available for purchase");
+                btnBuy.setText(buyButtonText);
+                btnBuy.setEnabled(true);
             }
-        } else {
-            Log.w(TAG, "Current user is null, cannot check ownership status");
-        }
+        });
     }
 
     private void setupButtons() {
@@ -458,20 +529,162 @@ public class CourseDetailDialog extends DialogFragment {
 
         btnBuy.setOnClickListener(v -> {
             Log.d(TAG, "Buy button clicked");
-            User currentUser = DataManager.getInstance().getCurrentUser();
-            if (currentUser == null) {
-                Log.e(TAG, "Cannot purchase: current user is null");
+            
+            // Get user from FirebaseAuth
+            FirebaseUser currentFirebaseUser = FirebaseAuth.getInstance().getCurrentUser();
+            if (currentFirebaseUser == null) {
+                Log.e(TAG, "Cannot purchase: Firebase user is null");
                 Toast.makeText(requireContext(), getString(R.string.user_not_found), Toast.LENGTH_SHORT).show();
                 return;
             }
-
-            if (currentUser.ownsModule(course.getId())) {
-                Log.w(TAG, "User already owns course: " + course.getId());
-                Toast.makeText(requireContext(), getString(R.string.already_owned), Toast.LENGTH_SHORT).show();
+            
+            // Check if user already owns this course
+            String uid = currentFirebaseUser.getUid();
+            checkIfUserOwnsCourse(uid, course.getId(), isOwned -> {
+                if (isOwned) {
+                    Log.w(TAG, "User already owns course: " + course.getId());
+                    Toast.makeText(requireContext(), getString(R.string.already_owned), Toast.LENGTH_SHORT).show();
+                } else {
+                    // User doesn't own course, show purchase dialog
+                    showPurchaseConfirmationDialog();
+                }
+            });
+        });
+        
+        btnAddReview.setOnClickListener(v -> {
+            Log.d(TAG, "Add review button clicked");
+            
+            // Check if user is authenticated
+            FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
+            if (currentUser == null) {
+                Toast.makeText(requireContext(), getString(R.string.login_to_review), Toast.LENGTH_SHORT).show();
                 return;
             }
-
-            showPurchaseConfirmationDialog();
+            
+            showAddReviewDialog();
+        });
+    }
+    
+    private void showAddReviewDialog() {
+        Log.i(TAG, "Showing add review dialog");
+        
+        try {
+            // Inflate custom dialog layout
+            View view = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_add_review, null);
+            
+            RatingBar ratingBar = view.findViewById(R.id.ratingBarReview);
+            EditText etComment = view.findViewById(R.id.etReviewComment);
+            Button btnCancel = view.findViewById(R.id.btnCancelReview);
+            Button btnSubmit = view.findViewById(R.id.btnSubmitReview);
+            
+            Dialog reviewDialog = new MaterialAlertDialogBuilder(requireContext())
+                    .setView(view)
+                    .setCancelable(true)
+                    .create();
+            
+            btnCancel.setOnClickListener(v -> {
+                Log.d(TAG, "Review cancelled");
+                reviewDialog.dismiss();
+            });
+            
+            btnSubmit.setOnClickListener(v -> {
+                float rating = ratingBar.getRating();
+                String comment = etComment.getText().toString().trim();
+                
+                if (rating == 0) {
+                    Toast.makeText(requireContext(), getString(R.string.rating_required), Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                
+                if (comment.isEmpty()) {
+                    Toast.makeText(requireContext(), getString(R.string.comment_required), Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                
+                // Get current user ID for review
+                FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
+                if (currentUser == null) {
+                    Toast.makeText(requireContext(), getString(R.string.user_not_found), Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                
+                // Use user email for display, but store review with UID for consistency
+                submitReview(currentUser.getEmail(), currentUser.getUid(), rating, comment);
+                reviewDialog.dismiss();
+            });
+            
+            reviewDialog.show();
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Error showing add review dialog: " + e.getMessage(), e);
+            Toast.makeText(requireContext(), getString(R.string.dialog_error), Toast.LENGTH_SHORT).show();
+        }
+    }
+    
+    private void submitReview(String userEmail, String userId, float rating, String comment) {
+        Log.i(TAG, "Submitting review: userId=" + userId + ", rating=" + rating + ", comment length=" + comment.length());
+        showLoading(true);
+        
+        // Create new review
+        Course.Review review = new Course.Review();
+        review.setUser(userEmail); // Display email for UI purposes
+        review.setUserId(userId); // Store UID for consistency and lookups
+        review.setRating(rating);
+        review.setComment(comment);
+        
+        DocumentReference courseRef = db.collection("marketplace").document(course.getId());
+        
+        // Get current reviews
+        courseRef.get().addOnSuccessListener(documentSnapshot -> {
+            Course courseData = documentSnapshot.toObject(Course.class);
+            List<Course.Review> reviews = new ArrayList<>();
+            
+            if (courseData != null && courseData.getReviews() != null) {
+                reviews = new ArrayList<>(courseData.getReviews());
+            }
+            
+            // Add new review
+            reviews.add(review);
+            
+            // Calculate new average rating
+            double totalRating = 0;
+            for (Course.Review r : reviews) {
+                totalRating += r.getRating();
+            }
+            double newAvgRating = totalRating / reviews.size();
+            
+            // Update course document
+            Map<String, Object> updates = new HashMap<>();
+            updates.put("reviews", reviews);
+            updates.put("averageRating", newAvgRating);
+            
+            courseRef.update(updates)
+                .addOnSuccessListener(aVoid -> {
+                    Log.i(TAG, "Review added successfully");
+                    
+                    // Update local course object
+                    if (course.getReviews() == null) {
+                        course.setReviews(new ArrayList<>());
+                    }
+                    course.getReviews().add(review);
+                    course.setAverageRating(newAvgRating);
+                    
+                    // Update UI
+                    setRatingInfo();
+                    setReviewsSection();
+                    
+                    showLoading(false);
+                    Toast.makeText(requireContext(), getString(R.string.review_added), Toast.LENGTH_SHORT).show();
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "Error adding review: " + e.getMessage());
+                    showLoading(false);
+                    Toast.makeText(requireContext(), "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                });
+        }).addOnFailureListener(e -> {
+            Log.e(TAG, "Error getting current reviews: " + e.getMessage());
+            showLoading(false);
+            Toast.makeText(requireContext(), "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         });
     }
     
@@ -493,6 +706,12 @@ public class CourseDetailDialog extends DialogFragment {
             if (videoView.isPlaying()) {
                 Log.v(TAG, "Stopping video playback on collapse");
                 videoView.stopPlayback();
+            }
+            
+            // Also reset the YouTube player if it's visible
+            if (webViewYoutube.getVisibility() == View.VISIBLE) {
+                Log.v(TAG, "Resetting YouTube player on collapse");
+                webViewYoutube.loadUrl("about:blank");
             }
         });
         
@@ -598,18 +817,32 @@ public class CourseDetailDialog extends DialogFragment {
         
         try {
             long startTime = System.currentTimeMillis();
-            String resourcePath = findLocalVideoResourceForUrl(videoUrl);
-            Log.d(TAG, "Resolved video resource path: " + resourcePath);
             
-            videoView.setVideoURI(Uri.parse(resourcePath));
-            Log.v(TAG, "Video URI set successfully");
-            
-            videoView.setOnCompletionListener(mp -> {
-                Log.d(TAG, "Video playback completed");
-                ivPlayButton.setVisibility(View.VISIBLE);
-            });
-            
-            setupVideoListeners();
+            // Check if it's a YouTube URL
+            if (videoUrl.contains("youtube.com") || videoUrl.contains("youtu.be")) {
+                Log.d(TAG, "YouTube URL detected, using WebView player");
+                videoView.setVisibility(View.GONE);
+                webViewYoutube.setVisibility(View.VISIBLE);
+                setupYouTubePlayer(videoUrl);
+            } else {
+                // Use regular VideoView for local videos
+                Log.d(TAG, "Local video URL detected, using VideoView");
+                webViewYoutube.setVisibility(View.GONE);
+                videoView.setVisibility(View.VISIBLE);
+                
+                String resourcePath = findLocalVideoResourceForUrl(videoUrl);
+                Log.d(TAG, "Resolved video resource path: " + resourcePath);
+                
+                videoView.setVideoURI(Uri.parse(resourcePath));
+                Log.v(TAG, "Video URI set successfully");
+                
+                videoView.setOnCompletionListener(mp -> {
+                    Log.d(TAG, "Video playback completed");
+                    ivPlayButton.setVisibility(View.VISIBLE);
+                });
+                
+                setupVideoListeners();
+            }
             
             ivPlayButton.setVisibility(View.VISIBLE);
             long endTime = System.currentTimeMillis();
@@ -618,6 +851,12 @@ public class CourseDetailDialog extends DialogFragment {
             Log.e(TAG, "Failed to set up video view: " + e.getMessage(), e);
             videoContainer.setVisibility(View.GONE);
         }
+    }
+    
+    private void setupYouTubePlayer(String youtubeUrl) {
+        Log.d(TAG, "Setting up YouTube player for URL: " + youtubeUrl);
+        // We don't autoplay the video initially, will wait for play button click
+        YouTubeHelper.loadYoutubeVideo(webViewYoutube, youtubeUrl, false);
     }
     
     private String findLocalVideoResourceForUrl(String videoUrl) {
@@ -712,8 +951,29 @@ public class CourseDetailDialog extends DialogFragment {
         try {
             long startTime = System.currentTimeMillis();
             
-            videoView.requestFocus();
-            videoView.start();
+            if (webViewYoutube.getVisibility() == View.VISIBLE) {
+                Log.d(TAG, "Playing YouTube video");
+                // Reload the YouTube video with autoplay enabled
+                String videoUrl = "";
+                if (course != null && course.getContent() != null && 
+                    course.getContent().getChapters() != null && !course.getContent().getChapters().isEmpty()) {
+                    
+                    for (Course.ContentItem item : course.getContent().getChapters().get(0).getItems()) {
+                        if ("video".equals(item.getType()) && item.getUrl() != null) {
+                            videoUrl = item.getUrl();
+                            break;
+                        }
+                    }
+                }
+                
+                if (!videoUrl.isEmpty()) {
+                    YouTubeHelper.loadYoutubeVideo(webViewYoutube, videoUrl, true);
+                }
+            } else {
+                Log.d(TAG, "Playing local video");
+                videoView.requestFocus();
+                videoView.start();
+            }
             
             long endTime = System.currentTimeMillis();
             Log.d(TAG, "Video playback started in " + (endTime - startTime) + "ms");
@@ -752,12 +1012,115 @@ public class CourseDetailDialog extends DialogFragment {
         });
     }
 
+    private void checkIfUserOwnsCourse(String userId, String courseId, OnCourseOwnershipCheckListener listener) {
+        if (userId == null || userId.isEmpty() || courseId == null || courseId.isEmpty()) {
+            if (listener != null) {
+                listener.onResult(false);
+            }
+            return;
+        }
+        
+        final boolean wasAttached = isAdded();
+        
+        Log.d(TAG, "Checking if user " + userId + " owns course " + courseId);
+        
+        db.collection("users").document(userId).get()
+            .addOnSuccessListener(documentSnapshot -> {
+                if (!wasAttached) {
+                    Log.w(TAG, "Fragment detached, skipping callback");
+                    return;
+                }
+                
+                if (documentSnapshot.exists()) {
+                    List<String> ownedCourses = (List<String>) documentSnapshot.get("ownedCourses");
+                    boolean isOwned = ownedCourses != null && ownedCourses.contains(courseId);
+                    Log.d(TAG, "User ownership check: " + isOwned);
+                    if (listener != null) {
+                        listener.onResult(isOwned);
+                    }
+                } else {
+                    Log.w(TAG, "User document not found for ID: " + userId);
+                    if (listener != null) {
+                        listener.onResult(false);
+                    }
+                }
+            })
+            .addOnFailureListener(e -> {
+                if (!wasAttached) {
+                    Log.w(TAG, "Fragment detached, skipping error callback");
+                    return;
+                }
+                
+                Log.e(TAG, "Error checking course ownership: " + e.getMessage());
+                if (listener != null) {
+                    listener.onResult(false);
+                }
+            });
+    }
+    
+    private void getUserWalletBalance(String userId, OnWalletBalanceListener listener) {
+        if (userId == null || userId.isEmpty()) {
+            if (listener != null) {
+                listener.onResult(0.0);
+            }
+            return;
+        }
+        
+        final boolean wasAttached = isAdded();
+        
+        Log.d(TAG, "Getting wallet balance for user: " + userId);
+        
+        db.collection("users").document(userId).get()
+            .addOnSuccessListener(documentSnapshot -> {
+                if (!wasAttached) {
+                    Log.w(TAG, "Fragment detached, skipping wallet callback");
+                    return;
+                }
+                
+                if (documentSnapshot.exists()) {
+                    Double balance = documentSnapshot.getDouble("wallet");
+                    if (balance != null) {
+                        Log.d(TAG, "User wallet balance: " + balance);
+                        if (listener != null) {
+                            listener.onResult(balance);
+                        }
+                    } else {
+                        Log.w(TAG, "User has no wallet balance");
+                        if (listener != null) {
+                            listener.onResult(0.0);
+                        }
+                    }
+                } else {
+                    Log.w(TAG, "User document not found for ID: " + userId);
+                    if (listener != null) {
+                        listener.onResult(0.0);
+                    }
+                }
+            })
+            .addOnFailureListener(e -> {
+                if (!wasAttached) {
+                    Log.w(TAG, "Fragment detached, skipping wallet error callback");
+                    return;
+                }
+                
+                Log.e(TAG, "Error getting wallet balance: " + e.getMessage());
+                if (listener != null) {
+                    listener.onResult(0.0);
+                }
+            });
+    }
+    
     private void showPurchaseConfirmationDialog() {
         Log.i(TAG, "Showing purchase confirmation dialog");
         
-        User currentUser = DataManager.getInstance().getCurrentUser();
-        if (currentUser == null) {
-            Log.e(TAG, "Cannot show purchase dialog: current user is null");
+        if (!isAdded() || getContext() == null) {
+            Log.e(TAG, "Cannot show purchase dialog: Fragment not attached to context");
+            return;
+        }
+        
+        FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (firebaseUser == null) {
+            Log.e(TAG, "Cannot show purchase dialog: Firebase user is null");
             Toast.makeText(requireContext(), getString(R.string.user_not_found), Toast.LENGTH_SHORT).show();
             return;
         }
@@ -766,66 +1129,79 @@ public class CourseDetailDialog extends DialogFragment {
             Log.e(TAG, "Cannot show purchase dialog: course is null");
             return;
         }
-
-        try {
-            View view = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_purchase_confirmation, null);
-            Log.v(TAG, "Purchase confirmation dialog layout inflated");
-            
-            TextView tvPurchaseCourseName = view.findViewById(R.id.tvPurchaseCourseName);
-            TextView tvPurchasePrice = view.findViewById(R.id.tvPurchasePrice);
-            TextView tvPurchaseBalance = view.findViewById(R.id.tvPurchaseBalance);
-            TextView tvPurchaseNewBalance = view.findViewById(R.id.tvPurchaseNewBalance);
-            Button btnCancelPurchase = view.findViewById(R.id.btnCancelPurchase);
-            Button btnConfirmPurchase = view.findViewById(R.id.btnConfirmPurchase);
-            
-            btnCancelPurchase.setText(getString(R.string.cancel));
-            btnConfirmPurchase.setText(getString(R.string.confirm));
-    
-            NumberFormat format = NumberFormat.getCurrencyInstance(Locale.GERMANY);
-            format.setCurrency(Currency.getInstance("EUR"));
-            
-            double currentBalance = currentUser.getWallet();
-            double price = course.getPrice();
-            double newBalance = currentBalance - price;
-            
-            Log.v(TAG, String.format("Purchase details: balance=%.2f, price=%.2f, newBalance=%.2f", 
-                    currentBalance, price, newBalance));
-            
-            if (currentBalance < price) {
-                Log.w(TAG, "Insufficient funds for purchase: " + currentBalance + " < " + price);
-                Toast.makeText(requireContext(), getString(R.string.insufficient_funds), 
-                               Toast.LENGTH_SHORT).show();
+        
+        // Cache string resources needed in callback
+        final String insufficientFundsMessage = getString(R.string.insufficient_funds);
+        
+        getUserWalletBalance(firebaseUser.getUid(), (walletBalance) -> {
+            if (!isAdded() || getContext() == null) {
+                Log.e(TAG, "Fragment detached, skipping dialog creation");
                 return;
             }
-    
-            tvPurchaseCourseName.setText(course.getName());
-            tvPurchasePrice.setText(format.format(price));
-            tvPurchaseBalance.setText(format.format(currentBalance));
-            tvPurchaseNewBalance.setText(format.format(newBalance));
             
-            Dialog confirmationDialog = new MaterialAlertDialogBuilder(requireContext())
-                    .setView(view)
-                    .setCancelable(true)
-                    .create();
-    
-            btnCancelPurchase.setOnClickListener(v -> {
-                Log.d(TAG, "Purchase cancelled by user");
-                confirmationDialog.dismiss();
-            });
-            
-            btnConfirmPurchase.setOnClickListener(v -> {
-                Log.d(TAG, "Purchase confirmed, proceeding with transaction");
-                confirmationDialog.dismiss();
-                purchaseCourse(currentUser.getEmail(), course.getId(), course.getPrice());
-            });
-    
-            confirmationDialog.show();
-            Log.i(TAG, "Purchase confirmation dialog displayed");
-            
-        } catch (Exception e) {
-            Log.e(TAG, "Error showing purchase confirmation dialog: " + e.getMessage(), e);
-            Toast.makeText(requireContext(), getString(R.string.dialog_error), Toast.LENGTH_SHORT).show();
-        }
+            // Continue with purchase dialog setup
+            try {
+                View view = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_purchase_confirmation, null);
+                Log.v(TAG, "Purchase confirmation dialog layout inflated");
+                
+                TextView tvPurchaseCourseName = view.findViewById(R.id.tvPurchaseCourseName);
+                TextView tvPurchasePrice = view.findViewById(R.id.tvPurchasePrice);
+                TextView tvPurchaseBalance = view.findViewById(R.id.tvPurchaseBalance);
+                TextView tvPurchaseNewBalance = view.findViewById(R.id.tvPurchaseNewBalance);
+                Button btnCancelPurchase = view.findViewById(R.id.btnCancelPurchase);
+                Button btnConfirmPurchase = view.findViewById(R.id.btnConfirmPurchase);
+                
+                btnCancelPurchase.setText(getString(R.string.cancel));
+                btnConfirmPurchase.setText(getString(R.string.confirm));
+        
+                NumberFormat format = NumberFormat.getCurrencyInstance(Locale.GERMANY);
+                format.setCurrency(Currency.getInstance("EUR"));
+                
+                double currentBalance = walletBalance;
+                double price = course.getPrice();
+                double newBalance = currentBalance - price;
+                
+                Log.v(TAG, String.format("Purchase details: balance=%.2f, price=%.2f, newBalance=%.2f", 
+                        currentBalance, price, newBalance));
+                
+                if (currentBalance < price) {
+                    Log.w(TAG, "Insufficient funds for purchase: " + currentBalance + " < " + price);
+                    if (isAdded() && getContext() != null) {
+                        Toast.makeText(requireContext(), insufficientFundsMessage, 
+                                       Toast.LENGTH_SHORT).show();
+                    }
+                    return;
+                }
+        
+                tvPurchaseCourseName.setText(course.getName());
+                tvPurchasePrice.setText(format.format(price));
+                tvPurchaseBalance.setText(format.format(currentBalance));
+                tvPurchaseNewBalance.setText(format.format(newBalance));
+                
+                Dialog confirmationDialog = new MaterialAlertDialogBuilder(requireContext())
+                        .setView(view)
+                        .setCancelable(true)
+                        .create();
+        
+                btnCancelPurchase.setOnClickListener(v -> {
+                    Log.d(TAG, "Purchase cancelled by user");
+                    confirmationDialog.dismiss();
+                });
+                
+                btnConfirmPurchase.setOnClickListener(v -> {
+                    Log.d(TAG, "Purchase confirmed, proceeding with transaction");
+                    confirmationDialog.dismiss();
+                    purchaseCourse(firebaseUser.getUid(), course.getId(), course.getPrice());
+                });
+        
+                confirmationDialog.show();
+                Log.i(TAG, "Purchase confirmation dialog displayed");
+                
+            } catch (Exception e) {
+                Log.e(TAG, "Error showing purchase confirmation dialog: " + e.getMessage(), e);
+                Toast.makeText(requireContext(), getString(R.string.dialog_error), Toast.LENGTH_SHORT).show();
+            }
+        });
     }
     
     private void purchaseCourse(String userId, String courseId, double price) {
@@ -833,28 +1209,102 @@ public class CourseDetailDialog extends DialogFragment {
                 userId, courseId, price));
         showLoading(true);
         
-        MarketplaceFirestoreManager.getInstance().purchaseCourse(userId, courseId, price, new MarketplaceFirestoreManager.OnPurchaseListener() {
-            @Override
-            public void onPurchaseSuccess() {
+        // Get a reference to the Firestore database
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        
+        // Run as a transaction to ensure both user and course are updated atomically
+        db.runTransaction(transaction -> {
+            try {
+                // Get both document references and read them at the start of transaction
+                DocumentReference userRef = db.collection("users").document(userId);
+                DocumentReference courseRef = db.collection("marketplace").document(courseId);
+                
+                DocumentSnapshot userSnapshot = transaction.get(userRef);
+                DocumentSnapshot courseSnapshot = transaction.get(courseRef);
+                
+                // Process the retrieved data
+                if (!userSnapshot.exists()) {
+                    Log.e(TAG, "User not found in transaction");
+                    return "User not found";
+                }
+                
+                // Get the current wallet balance
+                Double currentBalance = userSnapshot.getDouble("wallet");
+                if (currentBalance == null) {
+                    currentBalance = 0.0;
+                }
+                
+                // Check if user has enough funds
+                if (currentBalance < price) {
+                    Log.e(TAG, "Insufficient funds: " + currentBalance + " < " + price);
+                    return "Insufficient funds";
+                }
+                
+                // Get the owned courses array
+                List<String> ownedCourses = (List<String>) userSnapshot.get("ownedCourses");
+                if (ownedCourses == null) {
+                    ownedCourses = new ArrayList<>();
+                }
+                
+                // Check if the user already owns this course
+                if (ownedCourses.contains(courseId)) {
+                    Log.e(TAG, "User already owns this course");
+                    return "User already owns this course";
+                }
+                
+                // Add the course ID to the owned courses array
+                ownedCourses.add(courseId);
+                
+                // Calculate the new balance
+                double newBalance = currentBalance - price;
+                
+                // Update the user document
+                transaction.update(userRef, "wallet", newBalance);
+                transaction.update(userRef, "ownedCourses", ownedCourses);
+                
+                // Update course statistics if the course exists
+                if (courseSnapshot.exists()) {
+                    transaction.update(courseRef, "statistics.purchasesToday", FieldValue.increment(1));
+                    transaction.update(courseRef, "statistics.totalPurchases", FieldValue.increment(1));
+                }
+                
+                // Return null to indicate success
+                return null;
+            } catch (Exception e) {
+                Log.e(TAG, "Transaction failed with exception: " + e.getMessage(), e);
+                return "Transaction error: " + e.getMessage();
+            }
+        }).addOnSuccessListener(result -> {
+            showLoading(false);
+            
+            if (result == null) {
+                // Null result means success
                 Log.i(TAG, "Purchase completed successfully");
-                showLoading(false);
                 Toast.makeText(requireContext(), getString(R.string.purchase_successful), Toast.LENGTH_SHORT).show();
                 
+                // Update the UI
+                configureBuyButton();
+                
+                // Notify listener
                 if (purchaseCompletedListener != null) {
-                    Log.d(TAG, "Notifying purchase completion listener");
                     purchaseCompletedListener.onPurchaseCompleted();
                 }
                 
+                // Close dialog 
                 dismiss();
+            } else {
+                // Non-null result means error with message
+                Log.e(TAG, "Purchase failed: " + result);
+                Toast.makeText(requireContext(), 
+                             getString(R.string.purchase_failed) + ": " + result, 
+                             Toast.LENGTH_SHORT).show();
             }
-
-            @Override
-            public void onError(String errorMessage) {
-                Log.e(TAG, "Purchase failed: " + errorMessage);
-                showLoading(false);
-                Toast.makeText(requireContext(), getString(R.string.purchase_failed) + ": " + errorMessage, 
-                              Toast.LENGTH_SHORT).show();
-            }
+        }).addOnFailureListener(e -> {
+            Log.e(TAG, "Purchase failed with exception: " + e.getMessage(), e);
+            showLoading(false);
+            Toast.makeText(requireContext(), 
+                         getString(R.string.purchase_failed) + ": " + e.getMessage(), 
+                         Toast.LENGTH_SHORT).show();
         });
     }
 
@@ -870,6 +1320,20 @@ public class CourseDetailDialog extends DialogFragment {
     public void setPurchaseCompletedListener(PurchaseCompletedListener listener) {
         Log.d(TAG, "Setting purchase completed listener");
         this.purchaseCompletedListener = listener;
+    }
+    
+    /**
+     * Interface for course ownership check callback
+     */
+    public interface OnCourseOwnershipCheckListener {
+        void onResult(boolean isOwned);
+    }
+    
+    /**
+     * Interface for wallet balance callback
+     */
+    public interface OnWalletBalanceListener {
+        void onResult(double balance);
     }
 
     private static class ReviewAdapter extends RecyclerView.Adapter<ReviewAdapter.ReviewViewHolder> {

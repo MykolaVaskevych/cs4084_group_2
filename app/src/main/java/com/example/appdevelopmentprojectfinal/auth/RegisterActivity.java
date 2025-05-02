@@ -131,23 +131,42 @@ public class RegisterActivity extends AppCompatActivity {
         // Show progress
         showLoading(true);
         
-        // Create user with email and password
-        firebaseAuth.createUserWithEmailAndPassword(email, password)
-            .addOnCompleteListener(this, task -> {
-                if (task.isSuccessful()) {
-                    // Sign in success, create user profile
-                    Log.d(TAG, "createUserWithEmail:success");
+        // If the user already exists in Firebase Auth but not in Firestore,
+        // we need to handle this explicitly (this happens if Firestore collection was deleted)
+        
+        // First try to sign in with the provided credentials to check if user exists
+        firebaseAuth.signInWithEmailAndPassword(email, password)
+            .addOnCompleteListener(signInTask -> {
+                if (signInTask.isSuccessful()) {
+                    // User exists in Firebase Auth, but may need Firestore document
+                    Log.d(TAG, "User exists in Firebase Auth, re-creating Firestore document");
                     FirebaseUser firebaseUser = firebaseAuth.getCurrentUser();
                     if (firebaseUser != null) {
-                        // Create user profile in Firestore
+                        // Re-create user profile in Firestore with provided details
                         createUserProfile(firebaseUser.getUid(), email, firstName, lastName, year, department, course);
                     }
                 } else {
-                    // If sign in fails, display a message to the user.
-                    Log.w(TAG, "createUserWithEmail:failure", task.getException());
-                    Toast.makeText(RegisterActivity.this, "Registration failed: " + task.getException().getMessage(),
-                            Toast.LENGTH_SHORT).show();
-                    showLoading(false);
+                    // User doesn't exist, create a new one
+                    Log.d(TAG, "Creating new user account");
+                    firebaseAuth.createUserWithEmailAndPassword(email, password)
+                        .addOnCompleteListener(this, createTask -> {
+                            if (createTask.isSuccessful()) {
+                                // Sign in success, create user profile
+                                Log.d(TAG, "createUserWithEmail:success");
+                                FirebaseUser firebaseUser = firebaseAuth.getCurrentUser();
+                                if (firebaseUser != null) {
+                                    // Create user profile in Firestore
+                                    createUserProfile(firebaseUser.getUid(), email, firstName, lastName, year, department, course);
+                                }
+                            } else {
+                                // If sign in fails, display a message to the user.
+                                Log.w(TAG, "createUserWithEmail:failure", createTask.getException());
+                                Toast.makeText(RegisterActivity.this, 
+                                    "Registration failed: " + createTask.getException().getMessage(),
+                                    Toast.LENGTH_SHORT).show();
+                                showLoading(false);
+                            }
+                        });
                 }
             });
     }
@@ -175,8 +194,8 @@ public class RegisterActivity extends AppCompatActivity {
         // Empty owned courses
         user.setOwnedCourses(new ArrayList<>());
         
-        // Save to Firestore
-        firestore.collection("users").document(email)
+        // Save to Firestore using the UID instead of email
+        firestore.collection("users").document(uid)
             .set(user)
             .addOnSuccessListener(aVoid -> {
                 Log.d(TAG, "User profile created for: " + email);
@@ -196,6 +215,22 @@ public class RegisterActivity extends AppCompatActivity {
     private void startMainActivity() {
         Intent intent = new Intent(this, MainActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        
+        // Pass user information to MainActivity
+        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+        if (currentUser != null) {
+            String userId = currentUser.getEmail();
+            if (userId == null || userId.isEmpty()) {
+                userId = currentUser.getUid();
+            }
+            
+            // Use Firebase UID instead of email for database paths
+            String uid = currentUser.getUid();
+            
+            intent.putExtra("USER_ID", uid);
+            Log.d(TAG, "User email: " + userId + ", Using UID: " + uid);
+        }
+        
         startActivity(intent);
         finish();
     }

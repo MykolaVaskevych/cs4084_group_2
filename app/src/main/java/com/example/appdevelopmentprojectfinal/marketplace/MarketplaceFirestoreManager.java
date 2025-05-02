@@ -30,7 +30,7 @@ import java.util.Map;
 
 public class MarketplaceFirestoreManager {
     private static final String TAG = "MarketplaceFirestore";
-    private static final String COLLECTION_COURSES = "courses";
+    private static final String COLLECTION_COURSES = "marketplace";
     private static final String COLLECTION_USERS = "users";
     
     private FirebaseFirestore db;
@@ -548,6 +548,75 @@ public class MarketplaceFirestoreManager {
         void onError(String errorMessage);
     }
     
+    public void addReviewToCourse(String courseId, Course.Review review, final OnCourseOperationListener listener) {
+        if (courseId == null || courseId.isEmpty() || review == null) {
+            Log.e(TAG, "Invalid parameters for adding review");
+            if (listener != null) {
+                listener.onError("Invalid parameters");
+            }
+            return;
+        }
+        
+        Log.i(TAG, "Adding review to course: " + courseId);
+        
+        coursesCollection.document(courseId).get()
+            .addOnSuccessListener(documentSnapshot -> {
+                if (documentSnapshot.exists()) {
+                    Course course = documentSnapshot.toObject(Course.class);
+                    if (course != null) {
+                        // Add new review to existing reviews
+                        List<Course.Review> reviews = course.getReviews();
+                        if (reviews == null) {
+                            reviews = new ArrayList<>();
+                        }
+                        reviews.add(review);
+                        
+                        // Calculate new average rating
+                        double totalRating = 0;
+                        for (Course.Review r : reviews) {
+                            totalRating += r.getRating();
+                        }
+                        double newAverageRating = totalRating / reviews.size();
+                        
+                        // Update course with new reviews and average rating
+                        Map<String, Object> updates = new HashMap<>();
+                        updates.put("reviews", reviews);
+                        updates.put("averageRating", newAverageRating);
+                        
+                        coursesCollection.document(courseId).update(updates)
+                            .addOnSuccessListener(aVoid -> {
+                                Log.i(TAG, "Review added successfully to course: " + courseId);
+                                if (listener != null) {
+                                    listener.onSuccess();
+                                }
+                            })
+                            .addOnFailureListener(e -> {
+                                Log.e(TAG, "Error updating course with review: " + e.getMessage());
+                                if (listener != null) {
+                                    listener.onError("Failed to save review: " + e.getMessage());
+                                }
+                            });
+                    } else {
+                        Log.e(TAG, "Error parsing course data");
+                        if (listener != null) {
+                            listener.onError("Error processing course data");
+                        }
+                    }
+                } else {
+                    Log.e(TAG, "Course not found: " + courseId);
+                    if (listener != null) {
+                        listener.onError("Course not found");
+                    }
+                }
+            })
+            .addOnFailureListener(e -> {
+                Log.e(TAG, "Error loading course for review: " + e.getMessage());
+                if (listener != null) {
+                    listener.onError("Failed to load course: " + e.getMessage());
+                }
+            });
+    }
+    
     // User management methods
     
     public User getCurrentUser() {
@@ -561,48 +630,6 @@ public class MarketplaceFirestoreManager {
         this.currentUserId = user != null ? user.getEmail() : null;
     }
     
-    /**
-     * Creates a default user when user is not found in Firestore
-     */
-    private void createDefaultUser(String userId, final OnUserLoadedListener listener) {
-        Log.i(TAG, "Creating default user with ID: " + userId);
-        
-        // Create a new user with default values
-        User newUser = new User();
-        newUser.setEmail(userId);
-        newUser.setFirstName("Default");
-        newUser.setLastName("User");
-        newUser.setYear(3);
-        newUser.setCourse("LM051");
-        newUser.setDepartment("Computer Science & Information Systems");
-        newUser.setWallet(1000.0);
-        
-        // Default modules
-        List<String> defaultModules = Arrays.asList("CS4084", "CS4106", "CS4116", "CS4187", "CS4457");
-        newUser.setModules(defaultModules);
-        
-        // Empty owned courses
-        List<String> ownedCourses = new ArrayList<>();
-        newUser.setOwnedCourses(ownedCourses);
-        
-        // Save to Firestore
-        usersCollection.document(userId)
-            .set(newUser)
-            .addOnSuccessListener(aVoid -> {
-                Log.i(TAG, "Default user created successfully in Firestore");
-                
-                if (listener != null) {
-                    listener.onUserLoaded(newUser);
-                }
-            })
-            .addOnFailureListener(e -> {
-                Log.e(TAG, "Error creating default user: " + e.getMessage(), e);
-                
-                if (listener != null) {
-                    listener.onError(e.getMessage());
-                }
-            });
-    }
     
     public void loadCurrentUser(String userId, final OnUserLoadedListener listener) {
         if (userId == null || userId.isEmpty()) {
@@ -622,17 +649,17 @@ public class MarketplaceFirestoreManager {
             return;
         }
 
-        //TODO: fix that unresolved, strange but it works now as expected
-        // Check if we have an authenticated user
+        // Always use Firebase UID for consistency
         FirebaseUser authUser = FirebaseAuth.getInstance().getCurrentUser();
         final String userIdToUse;
         
-        if (authUser != null && authUser.getEmail() != null) {
-            // If we have an authenticated user with email, use that instead
-            userIdToUse = authUser.getEmail();
-            Log.i(TAG, "Using authenticated user email: " + userIdToUse);
+        if (authUser != null) {
+            // Always use the UID for consistency
+            userIdToUse = authUser.getUid();
+            Log.i(TAG, "Using authenticated user UID: " + userIdToUse);
         } else {
             userIdToUse = userId;
+            Log.w(TAG, "No authenticated user, using provided ID: " + userId);
         }
         
         Log.i(TAG, "Loading current user with ID: " + userIdToUse);
@@ -655,30 +682,10 @@ public class MarketplaceFirestoreManager {
             
             @Override
             public void onError(String errorMessage) {
-                // User not found in Firestore, create default user
-                Log.w(TAG, "User not found in Firestore: " + errorMessage + ". Creating default user.");
-                
-                createDefaultUser(userIdToUse, new OnUserLoadedListener() {
-                    @Override
-                    public void onUserLoaded(User user) {
-                        Log.i(TAG, "Default user created successfully: " + user.getEmail());
-                        currentUser = user;
-                        currentUserId = userIdToUse;
-                        
-                        if (listener != null) {
-                            listener.onUserLoaded(user);
-                        }
-                    }
-                    
-                    @Override
-                    public void onError(String createError) {
-                        Log.e(TAG, "Error creating default user: " + createError);
-                        
-                        if (listener != null) {
-                            listener.onError("Failed to create user: " + createError);
-                        }
-                    }
-                });
+                Log.e(TAG, "User not found in Firestore: " + errorMessage);
+                if (listener != null) {
+                    listener.onError("User not found in database. Please register first.");
+                }
             }
         });
     }

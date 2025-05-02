@@ -17,13 +17,14 @@ import com.example.appdevelopmentprojectfinal.MainActivity;
 import com.example.appdevelopmentprojectfinal.R;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 public class LoginActivity extends AppCompatActivity {
     private static final String TAG = "LoginActivity";
 
     // UI components
     private EditText etEmail, etPassword;
-    private Button btnLogin, btnLoginAnonymously;
+    private Button btnLogin;
     private TextView tvRegister;
     private ProgressBar progressBar;
     
@@ -69,13 +70,11 @@ public class LoginActivity extends AppCompatActivity {
         etEmail = findViewById(R.id.etEmail);
         etPassword = findViewById(R.id.etPassword);
         btnLogin = findViewById(R.id.btnLogin);
-        btnLoginAnonymously = findViewById(R.id.btnLoginAnonymously);
         tvRegister = findViewById(R.id.tvRegister);
         progressBar = findViewById(R.id.progressBar);
         
         // Set up listeners
         btnLogin.setOnClickListener(v -> loginWithEmailPassword());
-        btnLoginAnonymously.setOnClickListener(v -> loginAnonymously());
         tvRegister.setOnClickListener(v -> startRegisterActivity());
     }
     
@@ -108,8 +107,31 @@ public class LoginActivity extends AppCompatActivity {
                     Log.d(TAG, "signInWithEmail:success");
                     FirebaseUser user = firebaseAuth.getCurrentUser();
                     if (user != null) {
-                        Toast.makeText(LoginActivity.this, "Welcome back!", Toast.LENGTH_SHORT).show();
-                        startMainActivity();
+                        // Check if user has a Firestore document
+                        FirebaseFirestore db = FirebaseFirestore.getInstance();
+                        db.collection("users").document(user.getUid()).get()
+                            .addOnSuccessListener(documentSnapshot -> {
+                                if (documentSnapshot.exists()) {
+                                    // User exists in Firestore, proceed as normal
+                                    Toast.makeText(LoginActivity.this, "Welcome back!", Toast.LENGTH_SHORT).show();
+                                    startMainActivity();
+                                } else {
+                                    // User doesn't exist in Firestore, they need to register
+                                    Toast.makeText(LoginActivity.this, 
+                                        "Account needs to be registered. Please register first.", 
+                                        Toast.LENGTH_SHORT).show();
+                                    // Sign out the user
+                                    firebaseAuth.signOut();
+                                    showLoading(false);
+                                }
+                            })
+                            .addOnFailureListener(e -> {
+                                Log.e(TAG, "Error checking Firestore document", e);
+                                Toast.makeText(LoginActivity.this, 
+                                    "Error checking account. Please try again.", 
+                                    Toast.LENGTH_SHORT).show();
+                                showLoading(false);
+                            });
                     }
                 } else {
                     // Sign in failed
@@ -121,31 +143,6 @@ public class LoginActivity extends AppCompatActivity {
             });
     }
     
-    /**
-     * Login anonymously
-     */
-    private void loginAnonymously() {
-        showLoading(true);
-        
-        firebaseAuth.signInAnonymously()
-            .addOnCompleteListener(this, task -> {
-                if (task.isSuccessful()) {
-                    // Sign in success
-                    Log.d(TAG, "signInAnonymously:success");
-                    FirebaseUser user = firebaseAuth.getCurrentUser();
-                    if (user != null) {
-                        Toast.makeText(LoginActivity.this, "Signed in anonymously", Toast.LENGTH_SHORT).show();
-                        startMainActivity();
-                    }
-                } else {
-                    // Sign in failed
-                    Log.w(TAG, "signInAnonymously:failure", task.getException());
-                    Toast.makeText(LoginActivity.this, "Anonymous authentication failed: " + task.getException().getMessage(),
-                            Toast.LENGTH_SHORT).show();
-                    showLoading(false);
-                }
-            });
-    }
     
     /**
      * Start the register activity
@@ -161,6 +158,20 @@ public class LoginActivity extends AppCompatActivity {
     private void startMainActivity() {
         Intent intent = new Intent(this, MainActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        
+        // Use Firebase UID consistently for database paths
+        FirebaseUser currentUser = firebaseAuth.getCurrentUser();
+        if (currentUser != null) {
+            String uid = currentUser.getUid();
+            String email = currentUser.getEmail();
+            
+            // Always use the UID for database operations
+            intent.putExtra("USER_ID", uid);
+            Log.d(TAG, "User email: " + (email != null ? email : "anonymous") + ", Using UID: " + uid);
+        } else {
+            Log.w(TAG, "Starting MainActivity with no user ID");
+        }
+        
         startActivity(intent);
         finish();
     }
@@ -172,12 +183,10 @@ public class LoginActivity extends AppCompatActivity {
         if (isLoading) {
             progressBar.setVisibility(View.VISIBLE);
             btnLogin.setEnabled(false);
-            btnLoginAnonymously.setEnabled(false);
             tvRegister.setEnabled(false);
         } else {
             progressBar.setVisibility(View.GONE);
             btnLogin.setEnabled(true);
-            btnLoginAnonymously.setEnabled(true);
             tvRegister.setEnabled(true);
         }
     }

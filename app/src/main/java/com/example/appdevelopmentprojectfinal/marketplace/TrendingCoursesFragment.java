@@ -19,6 +19,9 @@ import com.example.appdevelopmentprojectfinal.R;
 import com.example.appdevelopmentprojectfinal.model.Course;
 import com.example.appdevelopmentprojectfinal.model.User;
 import com.example.appdevelopmentprojectfinal.utils.DataManager;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.text.NumberFormat;
 import java.util.ArrayList;
@@ -43,24 +46,19 @@ public class TrendingCoursesFragment extends Fragment implements CourseAdapter.C
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                          Bundle savedInstanceState) {
-        Log.d(TAG, "onCreateView called");
         return inflater.inflate(R.layout.fragment_marketplace_section, container, false);
     }
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        Log.d(TAG, "onViewCreated called");
         
         initializeViews(view);
         setupAdapter();
-        updateWalletBalance();
-        setUpSearch();
-        loadTrendingCourses();
+        initializeUserData();
     }
     
     private void initializeViews(View view) {
-        Log.v(TAG, "Initializing views");
         tvWalletBalance = view.findViewById(R.id.tvWalletBalance);
         tvSectionTitle = view.findViewById(R.id.tvSectionTitle);
         etSearch = view.findViewById(R.id.etSearch);
@@ -70,13 +68,30 @@ public class TrendingCoursesFragment extends Fragment implements CourseAdapter.C
         loadingView = view.findViewById(R.id.loadingView);
         
         tvSectionTitle.setText(getString(R.string.trending_courses));
-        Log.v(TAG, "Views initialized, section title set to: " + getString(R.string.trending_courses));
     }
     
     private void setupAdapter() {
-        Log.v(TAG, "Setting up course adapter");
         adapter = new CourseAdapter(new ArrayList<>(), this);
         recyclerView.setAdapter(adapter);
+    }
+    
+    private void initializeUserData() {
+        Log.i(TAG, "Initializing user data");
+        showLoading(true);
+        
+        // Get current Firebase user
+        FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (firebaseUser == null) {
+            Log.e(TAG, "Cannot initialize user data: no authenticated user");
+            Toast.makeText(getContext(), "Please login to view trending courses", Toast.LENGTH_SHORT).show();
+            showLoading(false);
+            updateCoursesList(new ArrayList<>());
+            return;
+        }
+        
+        updateWalletBalance();
+        setUpSearch();
+        loadTrendingCourses();
     }
     
     private void setUpSearch() {
@@ -170,19 +185,44 @@ public class TrendingCoursesFragment extends Fragment implements CourseAdapter.C
     
     private void updateWalletBalance() {
         Log.d(TAG, "Updating wallet balance display");
-        User currentUser = DataManager.getInstance().getCurrentUser();
-        if (currentUser != null) {
-            NumberFormat format = NumberFormat.getCurrencyInstance(Locale.GERMANY);
-            format.setCurrency(Currency.getInstance("EUR"));
-            double balance = currentUser.getWallet();
-            String formattedBalance = format.format(balance);
-            String balanceText = getString(R.string.wallet_balance, formattedBalance);
-            
-            Log.v(TAG, "Wallet balance: " + formattedBalance);
-            tvWalletBalance.setText(balanceText);
-        } else {
-            Log.w(TAG, "Cannot update wallet balance: current user is null");
+        
+        // Get the Firebase authenticated user
+        FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (firebaseUser == null) {
+            Log.w(TAG, "Cannot update wallet balance: no authenticated user");
+            return;
         }
+        
+        // Always fetch fresh wallet balance from Firestore
+        FirebaseFirestore.getInstance().collection("users").document(firebaseUser.getUid())
+            .get()
+            .addOnSuccessListener(documentSnapshot -> {
+                if (documentSnapshot.exists()) {
+                    Double walletBalance = documentSnapshot.getDouble("wallet");
+                    if (walletBalance != null) {
+                        Log.d(TAG, String.format("Retrieved fresh wallet balance: %.2f", walletBalance));
+                        
+                        // Update UI with fresh data
+                        NumberFormat format = NumberFormat.getCurrencyInstance(Locale.GERMANY);
+                        format.setCurrency(Currency.getInstance("EUR"));
+                        String balanceText = getString(R.string.wallet_balance, format.format(walletBalance));
+                        tvWalletBalance.setText(balanceText);
+                        
+                        // Also update both cached users
+                        User dataManagerUser = DataManager.getInstance().getCurrentUser();
+                        if (dataManagerUser != null) {
+                            dataManagerUser.setWallet(walletBalance);
+                        }
+                        
+                        User marketplaceUser = MarketplaceFirestoreManager.getInstance().getCurrentUser();
+                        if (marketplaceUser != null) {
+                            marketplaceUser.setWallet(walletBalance);
+                        }
+                    }
+                }
+            })
+            .addOnFailureListener(e -> 
+                Log.e(TAG, "Error fetching fresh wallet balance: " + e.getMessage()));
     }
     
     @Override
@@ -220,14 +260,14 @@ public class TrendingCoursesFragment extends Fragment implements CourseAdapter.C
     @Override
     public void onResume() {
         super.onResume();
-        Log.d(TAG, "onResume called");
-        loadTrendingCourses();
-        updateWalletBalance();
-    }
-    
-    @Override
-    public void onPause() {
-        super.onPause();
-        Log.d(TAG, "onPause called");
+        
+        // Only refresh data if we already have a user loaded
+        if (MarketplaceFirestoreManager.getInstance().getCurrentUser() != null) {
+            loadTrendingCourses();
+            updateWalletBalance();
+        } else {
+            Log.w(TAG, "Cannot refresh courses: no user loaded");
+            initializeUserData();
+        }
     }
 }

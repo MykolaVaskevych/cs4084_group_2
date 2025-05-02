@@ -17,9 +17,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * Centralized authentication manager for Firebase Auth and user data
- */
 public class AuthManager {
     private static final String TAG = "AuthManager";
     private static final String COLLECTION_USERS = "users";
@@ -31,29 +28,19 @@ public class AuthManager {
     
     private User currentUser;
     
-    /**
-     * Interface for user data listeners
-     */
     public interface UserDataListener {
         void onUserDataLoaded(User user);
         void onUserDataError(String errorMessage);
     }
     
-    /**
-     * Private constructor to enforce singleton pattern
-     */
     private AuthManager() {
         firebaseAuth = FirebaseAuth.getInstance();
         firestore = FirebaseFirestore.getInstance();
         academicDbManager = AcademicDatabaseManager.getInstance();
         
-        // Initialize academic database
         academicDbManager.initializeDatabaseIfNeeded();
     }
     
-    /**
-     * Get singleton instance
-     */
     public static synchronized AuthManager getInstance() {
         if (instance == null) {
             instance = new AuthManager();
@@ -61,30 +48,18 @@ public class AuthManager {
         return instance;
     }
     
-    /**
-     * Get current Firebase user
-     */
     public FirebaseUser getCurrentFirebaseUser() {
         return firebaseAuth.getCurrentUser();
     }
     
-    /**
-     * Get current application user
-     */
     public User getCurrentUser() {
         return currentUser;
     }
     
-    /**
-     * Check if user is signed in
-     */
     public boolean isUserSignedIn() {
         return firebaseAuth.getCurrentUser() != null;
     }
     
-    /**
-     * Load user data for current authenticated user
-     */
     public void loadUserData(final UserDataListener listener) {
         FirebaseUser firebaseUser = firebaseAuth.getCurrentUser();
         if (firebaseUser == null) {
@@ -94,67 +69,44 @@ public class AuthManager {
             return;
         }
         
-        // For anonymous users, create a temporary profile
-        if (firebaseUser.isAnonymous()) {
-            Log.d(TAG, "Creating temporary profile for anonymous user");
-            User anonymousUser = createAnonymousUserProfile(firebaseUser.getUid());
-            currentUser = anonymousUser;
-            if (listener != null) {
-                listener.onUserDataLoaded(anonymousUser);
-            }
-            return;
-        }
+        String uid = firebaseUser.getUid();
         
-        // For email users, load from Firestore
-        String email = firebaseUser.getEmail();
-        if (email == null) {
-            if (listener != null) {
-                listener.onUserDataError("User email is null");
-            }
-            return;
-        }
-        
-        Log.d(TAG, "Loading user data for: " + email);
-        firestore.collection(COLLECTION_USERS).document(email)
+        Log.d(TAG, "Loading user data for UID: " + uid);
+        firestore.collection(COLLECTION_USERS).document(uid)
             .get()
-            .addOnCompleteListener(new OnCompleteListener<DocumentSnapshot>() {
-                @Override
-                public void onComplete(@NonNull Task<DocumentSnapshot> task) {
-                    if (task.isSuccessful()) {
-                        DocumentSnapshot document = task.getResult();
-                        if (document != null && document.exists()) {
-                            User user = document.toObject(User.class);
-                            if (user != null) {
-                                Log.d(TAG, "User data loaded: " + user.getEmail());
-                                currentUser = user;
-                                if (listener != null) {
-                                    listener.onUserDataLoaded(user);
-                                }
-                            } else {
-                                Log.w(TAG, "Error converting user data");
-                                if (listener != null) {
-                                    listener.onUserDataError("Error converting user data");
-                                }
-                            }
-                        } else {
-                            Log.d(TAG, "User document doesn't exist, creating new profile");
-                            createNewUserProfile(email, listener);
+            .addOnSuccessListener(document -> {
+                if (document.exists()) {
+                    User user = document.toObject(User.class);
+                    if (user != null) {
+                        Log.d(TAG, "User data loaded: " + user.getEmail());
+                        currentUser = user;
+                        if (listener != null) {
+                            listener.onUserDataLoaded(user);
                         }
                     } else {
-                        Log.w(TAG, "Error loading user data", task.getException());
+                        Log.w(TAG, "Error converting user data");
                         if (listener != null) {
-                            listener.onUserDataError("Error loading user data: " + 
-                                    (task.getException() != null ? task.getException().getMessage() : "Unknown error"));
+                            listener.onUserDataError("Error converting user data");
                         }
                     }
+                } else {
+                    Log.e(TAG, "Firebase Auth user exists but Firestore document is missing");
+                    if (listener != null) {
+                        listener.onUserDataError("Account incomplete. Please register first.");
+                        firebaseAuth.signOut();
+                    }
+                }
+            })
+            .addOnFailureListener(e -> {
+                Log.w(TAG, "Error loading user data", e);
+                if (listener != null) {
+                    listener.onUserDataError("Error loading user data: " + 
+                            (e != null ? e.getMessage() : "Unknown error"));
                 }
             });
     }
     
-    /**
-     * Create a new user profile if one doesn't exist
-     */
-    private void createNewUserProfile(String email, final UserDataListener listener) {
+    private void createNewUserProfile(String uid, String email, final UserDataListener listener) {
         User newUser = new User();
         newUser.setEmail(email);
         
@@ -176,8 +128,9 @@ public class AuthManager {
         // Empty owned courses
         newUser.setOwnedCourses(new ArrayList<>());
         
-        // Save to Firestore
-        firestore.collection(COLLECTION_USERS).document(email)
+        // Save to Firestore using UID as document ID
+        Log.d(TAG, "Creating new user profile with UID: " + uid + " and email: " + email);
+        firestore.collection(COLLECTION_USERS).document(uid)
             .set(newUser)
             .addOnSuccessListener(aVoid -> {
                 Log.d(TAG, "User profile created for: " + email);
@@ -192,29 +145,6 @@ public class AuthManager {
                     listener.onUserDataError("Error creating user profile: " + e.getMessage());
                 }
             });
-    }
-    
-    /**
-     * Create a temporary profile for anonymous users
-     */
-    private User createAnonymousUserProfile(String uid) {
-        User anonymousUser = new User();
-        anonymousUser.setEmail("anonymous_" + uid);
-        anonymousUser.setFirstName("Guest");
-        anonymousUser.setLastName("User");
-        anonymousUser.setYear(1);
-        anonymousUser.setDepartment("Guest");
-        anonymousUser.setCourse("Guest");
-        anonymousUser.setWallet(1000.0);
-        
-        // Default modules for guests
-        List<String> defaultModules = Arrays.asList("CS4084", "CS4106");
-        anonymousUser.setModules(defaultModules);
-        
-        // Empty owned courses
-        anonymousUser.setOwnedCourses(new ArrayList<>());
-        
-        return anonymousUser;
     }
     
     /**

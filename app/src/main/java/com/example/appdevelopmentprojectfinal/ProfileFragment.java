@@ -247,7 +247,16 @@ public class ProfileFragment extends Fragment {
     private void loadUserData() {
         if (!authManager.isUserSignedIn()) {
             Log.w(TAG, "No user is signed in");
-            redirectToLogin();
+            
+            if (getActivity() != null) {
+                // Create intent for login
+                Intent intent = new Intent(getActivity(), LoginActivity.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                
+                // Start the login activity
+                startActivity(intent);
+                getActivity().finish();
+            }
             return;
         }
         
@@ -872,14 +881,20 @@ public class ProfileFragment extends Fragment {
     private void saveUserToFirestore(final String successMessage) {
         if (currentUser == null || !isAdded()) return;
         
-        // Show loading state (could add progress indicator)
         setFieldsEnabled(false);
         
-        // Get user ID (email for non-anonymous users)
-        String userId = currentUser.getEmail();
+        // Get Firebase UID for document ID
+        FirebaseUser currentFirebaseUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (currentFirebaseUser == null) {
+            Toast.makeText(getContext(), "User not authenticated", Toast.LENGTH_SHORT).show();
+            return;
+        }
         
-        // Convert user to map for update
+        String userId = currentFirebaseUser.getUid();
+        
+        // Prepare update data
         Map<String, Object> updates = new HashMap<>();
+        updates.put("email", currentUser.getEmail());
         updates.put("firstName", currentUser.getFirstName());
         updates.put("lastName", currentUser.getLastName());
         updates.put("phoneNumber", currentUser.getPhoneNumber());
@@ -887,7 +902,7 @@ public class ProfileFragment extends Fragment {
         updates.put("course", currentUser.getCourse());
         updates.put("year", currentUser.getYear());
         updates.put("wallet", currentUser.getWallet());
-        updates.put("modules", currentUser.getModules()); // Add modules to the update
+        updates.put("modules", currentUser.getModules());
         
         // Update Firestore document
         firestore.collection("users").document(userId)
@@ -943,24 +958,20 @@ public class ProfileFragment extends Fragment {
      * Log out the current user and redirect to login screen
      */
     private void logoutUser() {
+        if (getActivity() == null) {
+            return;
+        }
+        
+        // Create intent before signing out
+        Intent intent = new Intent(getActivity(), LoginActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        
         // Call AuthManager to sign out
         authManager.signOut();
         
-        // Redirect to login activity
-        redirectToLogin();
+        // Start the login activity directly
+        startActivity(intent);
+        getActivity().finish();
     }
     
-    /**
-     * Redirect to login activity
-     */
-    private void redirectToLogin() {
-        Intent intent = new Intent(getActivity(), LoginActivity.class);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(intent);
-        
-        // Close the current activity
-        if (getActivity() != null) {
-            getActivity().finish();
-        }
-    }
 }

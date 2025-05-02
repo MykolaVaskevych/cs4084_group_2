@@ -108,6 +108,14 @@
                 android:text="No courses found"
                 android:textSize="16sp"
                 android:textAlignment="center" />
+                
+            <Button
+                android:id="@+id/btnCreateCourses"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="Create Sample Courses" 
+                style="@style/Widget.MaterialComponents.Button" />
 
         </LinearLayout>
 

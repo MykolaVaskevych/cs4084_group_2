@@ -20,6 +20,8 @@ import com.example.appdevelopmentprojectfinal.marketplace.TrendingCoursesFragmen
 import com.example.appdevelopmentprojectfinal.model.User;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 
 // Shows marketplace with tabs for different course categories
 public class StoreFragment extends Fragment {
@@ -66,16 +68,16 @@ public class StoreFragment extends Fragment {
     private void initializeUserData() {
         Log.i(TAG, "Loading user data from Firestore");
         
-        // First try to get user from DataManager as fallback
-        User dataManagerUser = null;
-        try {
-            dataManagerUser = com.example.appdevelopmentprojectfinal.utils.DataManager.getInstance().getCurrentUser();
-        } catch (Exception e) {
-            Log.e(TAG, "Error accessing DataManager: " + e.getMessage());
+        // Get current Firebase user
+        FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (firebaseUser == null) {
+            Log.e(TAG, "Cannot initialize user data: no authenticated user");
+            Toast.makeText(getContext(), "Please login to access the marketplace", Toast.LENGTH_SHORT).show();
+            setUpViewPager(); // Still set up the UI, but it may not have user-specific data
+            return;
         }
         
-        // Get user ID from DataManager or use default
-        String userId = (dataManagerUser != null) ? dataManagerUser.getEmail() : "default@studentmail.ul.ie";
+        String userId = firebaseUser.getUid();
         
         MarketplaceFirestoreManager.getInstance().loadCurrentUser(userId, new MarketplaceFirestoreManager.OnUserLoadedListener() {
             @Override

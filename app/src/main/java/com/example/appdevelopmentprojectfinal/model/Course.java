@@ -269,6 +269,7 @@ public class Course {
     @IgnoreExtraProperties
     public static class Review {
         private String user;
+        private String userId;
         private double rating;
         private String comment;
 
@@ -282,6 +283,14 @@ public class Course {
 
         public void setUser(String user) {
             this.user = user;
+        }
+        
+        public String getUserId() {
+            return userId;
+        }
+
+        public void setUserId(String userId) {
+            this.userId = userId;
         }
 
         public double getRating() {

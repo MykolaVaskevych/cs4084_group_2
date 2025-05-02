@@ -64,6 +64,16 @@
     <string name="course_not_found">Course not found</string>
     <string name="course_id_missing">Error: Course ID not provided</string>
     <string name="dialog_error">An error occurred. Please try again.</string>
+    <string name="add_review">Add Review</string>
+    <string name="submit_review">Submit</string>
+    <string name="review_comment_hint">Share your thoughts about this course</string>
+    <string name="review_rating">Rating</string>
+    <string name="review_comment">Comment</string>
+    <string name="review_added">Review added successfully</string>
+    <string name="rating_required">Please provide a rating</string>
+    <string name="comment_required">Please provide a comment</string>
+    <string name="login_to_buy">Login to buy</string>
+    <string name="login_to_review">Please log in to add a review</string>
     
     <!-- Preview Content Strings -->
     <string name="preview">Preview</string>

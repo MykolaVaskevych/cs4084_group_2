@@ -100,15 +100,6 @@
                 android:text="Login"
                 android:textAllCaps="false" />
 
-            <Button
-                android:id="@+id/btnLoginAnonymously"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="Login Anonymously"
-                android:textAllCaps="false"
-                app:backgroundTint="@android:color/darker_gray" />
-
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
