@@ -69,7 +69,7 @@
 - Delete modules
 - Hide or show modules
 - Moving modules between alternative slots
-
+- Personalized modules (colors and "movable" (present alternatives) blue font indicator)
 ### Marketplace
 - Buy and sell items
 - Browse listings
