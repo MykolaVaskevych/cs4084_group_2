@@ -387,8 +387,9 @@ public class OwnedCoursesFragment extends Fragment implements CourseAdapter.Cour
     
     @Override
     public void onCourseClicked(Course course) {
-        CourseDetailDialog dialog = CourseDetailDialog.newInstance(course.getId());
-        dialog.show(getParentFragmentManager(), "CourseDetail");
+        // For owned courses, show the full content view instead of preview
+        CourseFullContentDialog dialog = CourseFullContentDialog.newInstance(course.getId());
+        dialog.show(getParentFragmentManager(), "CourseFullContent");
     }
     
     @Override
