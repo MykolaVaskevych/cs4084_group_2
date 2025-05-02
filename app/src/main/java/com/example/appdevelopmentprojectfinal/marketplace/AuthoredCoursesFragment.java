@@ -64,32 +64,20 @@ public class AuthoredCoursesFragment extends Fragment implements CourseAdapter.C
         tvEmptyMessage = view.findViewById(R.id.tvEmptyMessage);
         loadingView = view.findViewById(R.id.loadingView);
         
-        // Repurpose the sample course creation button
-        Button btnCreateCourses = view.findViewById(R.id.btnCreateCourses);
+        // Hide the sample course creation button
+        View btnCreateCourses = view.findViewById(R.id.btnCreateCourses);
         if (btnCreateCourses != null) {
-            btnCreateCourses.setText(R.string.create_new_course);
-            btnCreateCourses.setVisibility(View.VISIBLE);
-            btnCreateCourses.setOnClickListener(v -> openCourseCreationDialog());
+            btnCreateCourses.setVisibility(View.GONE);
         }
         
-        // Add a floating action button for adding new courses
-        ViewGroup rootView = (ViewGroup) view.getParent();
-        fabAddCourse = new FloatingActionButton(requireContext());
-        fabAddCourse.setImageResource(android.R.drawable.ic_input_add);
-        fabAddCourse.setContentDescription("Add Course");
-        
-        ViewGroup.MarginLayoutParams params = new ViewGroup.MarginLayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, 
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        params.setMargins(0, 0, 32, 32); // right, bottom margins
-        fabAddCourse.setLayoutParams(params);
-        
-        // Position the FAB at the bottom right
-        if (rootView instanceof ViewGroup) {
-            fabAddCourse.setUseCompatPadding(true);
-            rootView.addView(fabAddCourse);
+        // Find the FAB that's declared in the fragment_store.xml layout 
+        // We need to go to the parent activity to access it
+        fabAddCourse = requireActivity().findViewById(R.id.fabAddCourse);
+        if (fabAddCourse != null) {
+            fabAddCourse.setVisibility(View.VISIBLE);
             fabAddCourse.setOnClickListener(v -> openCourseCreationDialog());
+        } else {
+            Log.e(TAG, "Could not find fabAddCourse in layout");
         }
         
         tvSectionTitle.setText(R.string.authored_courses);
@@ -231,6 +219,11 @@ public class AuthoredCoursesFragment extends Fragment implements CourseAdapter.C
     }
     
     private void updateCoursesList(List<Course> courses) {
+        // Always ensure FAB is visible, regardless of courses count
+        if (fabAddCourse != null) {
+            fabAddCourse.setVisibility(View.VISIBLE);
+        }
+        
         if (courses.isEmpty()) {
             recyclerView.setVisibility(View.GONE);
             emptyView.setVisibility(View.VISIBLE);
@@ -316,9 +309,9 @@ public class AuthoredCoursesFragment extends Fragment implements CourseAdapter.C
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        // Remove FAB when fragment is destroyed
-        if (fabAddCourse != null && fabAddCourse.getParent() != null) {
-            ((ViewGroup) fabAddCourse.getParent()).removeView(fabAddCourse);
+        // Hide the FAB when fragment is destroyed
+        if (fabAddCourse != null) {
+            fabAddCourse.setVisibility(View.GONE);
         }
     }
     

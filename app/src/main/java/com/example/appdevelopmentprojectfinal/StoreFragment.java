@@ -18,6 +18,7 @@ import com.example.appdevelopmentprojectfinal.marketplace.MarketplaceFirestoreMa
 import com.example.appdevelopmentprojectfinal.marketplace.AllCoursesFragment;
 import com.example.appdevelopmentprojectfinal.marketplace.OwnedCoursesFragment;
 import com.example.appdevelopmentprojectfinal.marketplace.AuthoredCoursesFragment;
+import com.example.appdevelopmentprojectfinal.marketplace.CourseCreationDialog;
 import com.example.appdevelopmentprojectfinal.model.User;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
@@ -79,6 +80,19 @@ public class StoreFragment extends Fragment {
         // Initialize views
         tabLayout = view.findViewById(R.id.tabLayout);
         viewPager = view.findViewById(R.id.viewPager);
+        
+        // Initialize FABs
+        View fabAddCourse = requireActivity().findViewById(R.id.fabAddCourse);
+        if (fabAddCourse != null) {
+            fabAddCourse.setVisibility(View.GONE); // Hidden by default
+            fabAddCourse.setOnClickListener(v -> {
+                // Open course creation dialog if we're on the authored tab
+                if (viewPager.getCurrentItem() == 2) {
+                    CourseCreationDialog dialog = new CourseCreationDialog();
+                    dialog.show(getChildFragmentManager(), "CourseCreation");
+                }
+            });
+        }
 
         // Initialize user data from Firestore
         initializeUserData();
@@ -160,6 +174,15 @@ public class StoreFragment extends Fragment {
             Log.d(TAG, "Setting initial tab to index: " + initialTabIndex);
             viewPager.postDelayed(() -> {
                 viewPager.setCurrentItem(initialTabIndex, false);
+                
+                // If initial tab is Authored Courses (index 2), show the Add Course FAB
+                if (initialTabIndex == 2) {
+                    View fabSearch = requireActivity().findViewById(R.id.fabSearch);
+                    View fabAddCourse = requireActivity().findViewById(R.id.fabAddCourse);
+                    
+                    if (fabSearch != null) fabSearch.setVisibility(View.GONE);
+                    if (fabAddCourse != null) fabAddCourse.setVisibility(View.VISIBLE);
+                }
             }, 100); // Short delay to ensure ViewPager is fully initialized
         }
         
@@ -168,6 +191,21 @@ public class StoreFragment extends Fragment {
             @Override
             public void onTabSelected(TabLayout.Tab tab) {
                 Log.d(TAG, "Tab selected: " + tab.getPosition());
+                int position = tab.getPosition();
+                
+                // Handle FAB visibility based on selected tab
+                View fabSearch = requireActivity().findViewById(R.id.fabSearch);
+                View fabAddCourse = requireActivity().findViewById(R.id.fabAddCourse);
+                
+                if (position == 2) { // Authored tab
+                    // Show Add Course FAB, hide Search FAB
+                    if (fabSearch != null) fabSearch.setVisibility(View.GONE);
+                    if (fabAddCourse != null) fabAddCourse.setVisibility(View.VISIBLE);
+                } else {
+                    // Show Search FAB, hide Add Course FAB
+                    if (fabSearch != null) fabSearch.setVisibility(View.VISIBLE);
+                    if (fabAddCourse != null) fabAddCourse.setVisibility(View.GONE);
+                }
             }
 
             @Override
