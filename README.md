@@ -4,7 +4,8 @@
 
 ### Authentication
 - Email/password login
-- User registration
+- User registration with basic information
+- Firebase authentication integration
 
 ### Home Page
 - Quick access to all features
@@ -71,5 +72,15 @@
 - Moving modules between alternative slots
 - Personalized modules (colors and "movable" (present alternatives) blue font indicator)
 ### Marketplace
-- Buy and sell items
-- Browse listings
+- Browse course listings
+- View course details with preview content
+- Course purchasing with virtual wallet
+- Full course content access with video lessons for owned courses
+- Course creation with YouTube video integration
+- Course management system
+- Virtual wallet for transactions
+- Video playback via URL (YouTube and direct links)
+
+### User Profile
+- Edit personal information
+- Wallet management and top-up
