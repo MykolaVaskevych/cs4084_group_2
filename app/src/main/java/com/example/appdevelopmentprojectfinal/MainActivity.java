@@ -48,20 +48,25 @@ public class MainActivity extends AppCompatActivity {
             finish();
             return;
         }
-        
+
         // Get user ID from intent (from LoginActivity/RegisterActivity)
         String userId = getIntent().getStringExtra("USER_ID");
-        
+
         // If no user ID was provided, use the Firebase user's UID
         if (userId == null || userId.isEmpty()) {
             userId = firebaseUser.getUid();
             Log.d("MainActivity", "Using Firebase UID: " + userId);
         }
-        
+
         // We'll consistently use UIDs for all database operations
 
         Log.d("MainActivity", "Initializing DataManager with user ID: " + userId);
-        
+
+        // Load HomepageFragment immediately
+        setupNavigation();
+        replaceFragment(new HomepageFragment());
+
+        // Initialize DataManager and load user data
         DataManager.getInstance().initialize(this, userId, new DataManager.OnUserLoadedListener() {
             @Override
             public void onUserLoaded(User user) {
@@ -69,19 +74,22 @@ public class MainActivity extends AppCompatActivity {
 
                 // Initialize the academic database
                 AcademicDatabaseManager.getInstance().initializeDatabaseIfNeeded();
-                
+
                 // Check if we need to create sample courses
                 checkAndCreateSampleCourses();
-                
-                setupNavigation();
-                replaceFragment(new HomepageFragment());
+
+                // Refresh the HomepageFragment to show updated data
+                Fragment currentFragment = getSupportFragmentManager().findFragmentById(R.id.frame_layout);
+                if (currentFragment instanceof HomepageFragment) {
+                    replaceFragment(new HomepageFragment());
+                }
             }
 
             @Override
             public void onError(String error) {
                 Log.e("MainActivity", "Error loading user: " + error);
                 Toast.makeText(MainActivity.this, "Error loading user data: " + error, Toast.LENGTH_LONG).show();
-                
+
                 // Redirect to login
                 startActivity(new Intent(MainActivity.this, com.example.appdevelopmentprojectfinal.auth.LoginActivity.class));
                 finish();
@@ -120,69 +128,69 @@ public class MainActivity extends AppCompatActivity {
     private void setupNavigation() {
 //        TimetableNotificationManager.createNotificationChannel(this);
     }
-    
+
     /**
      * Checks if sample courses exist in Firebase and creates them if needed
      */
     private void checkAndCreateSampleCourses() {
         Log.d("MainActivity", "Creating sample marketplace courses");
-        
+
         // Force creation of sample courses for testing
         Log.i("MainActivity", "Forcibly creating sample marketplace courses in Firebase");
-        
+
         // Delete any existing courses first
         FirebaseFirestore.getInstance().collection("marketplace")
-            .get()
-            .addOnSuccessListener(snapshot -> {
-                Log.d("MainActivity", "Found " + snapshot.size() + " existing marketplace courses - deleting them");
-                
-                if (snapshot.size() > 0) {
-                    // Delete each course document
-                    for (DocumentSnapshot doc : snapshot.getDocuments()) {
-                        doc.getReference().delete()
-                            .addOnSuccessListener(aVoid -> Log.d("MainActivity", "Deleted marketplace course: " + doc.getId()))
-                            .addOnFailureListener(e -> Log.e("MainActivity", "Failed to delete marketplace course: " + doc.getId(), e));
-                    }
-                    
-                    // Create new courses after a delay to ensure deletions complete
-                    new android.os.Handler().postDelayed(() -> {
+                .get()
+                .addOnSuccessListener(snapshot -> {
+                    Log.d("MainActivity", "Found " + snapshot.size() + " existing marketplace courses - deleting them");
+
+                    if (snapshot.size() > 0) {
+                        // Delete each course document
+                        for (DocumentSnapshot doc : snapshot.getDocuments()) {
+                            doc.getReference().delete()
+                                    .addOnSuccessListener(aVoid -> Log.d("MainActivity", "Deleted marketplace course: " + doc.getId()))
+                                    .addOnFailureListener(e -> Log.e("MainActivity", "Failed to delete marketplace course: " + doc.getId(), e));
+                        }
+
+                        // Create new courses after a delay to ensure deletions complete
+                        new android.os.Handler().postDelayed(() -> {
+                            createMarketplaceCourses();
+                        }, 1000); // 1 second delay
+                    } else {
+                        // No courses to delete, create new ones immediately
                         createMarketplaceCourses();
-                    }, 1000); // 1 second delay
-                } else {
-                    // No courses to delete, create new ones immediately
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    Log.e("MainActivity", "Error getting existing marketplace courses: " + e.getMessage(), e);
+
+                    // Create new sample courses anyway
                     createMarketplaceCourses();
-                }
-            })
-            .addOnFailureListener(e -> {
-                Log.e("MainActivity", "Error getting existing marketplace courses: " + e.getMessage(), e);
-                
-                // Create new sample courses anyway
-                createMarketplaceCourses();
-            });
+                });
     }
-    
-    
+
+
     private void createMarketplaceCourses() {
         Log.i("MainActivity", "Creating new marketplace courses");
-        
+
         // Create new sample courses
         AcademicDatabaseManager.getInstance().createSampleCoursesInFirebase(new AcademicDatabaseManager.OnCourseOperationListener() {
             @Override
             public void onSuccess() {
                 Log.i("MainActivity", "Sample marketplace courses created successfully");
-                
+
                 // Set the initialization flag
                 FirebaseDatabase.getInstance().getReference("course_init_flag").setValue(true)
-                    .addOnSuccessListener(aVoid -> Log.d("MainActivity", "Course initialization flag set"))
-                    .addOnFailureListener(e -> Log.e("MainActivity", "Failed to set course initialization flag", e));
-                
+                        .addOnSuccessListener(aVoid -> Log.d("MainActivity", "Course initialization flag set"))
+                        .addOnFailureListener(e -> Log.e("MainActivity", "Failed to set course initialization flag", e));
+
                 // Force refresh StoreFragment if it's currently visible
                 if (getSupportFragmentManager().findFragmentById(R.id.frame_layout) instanceof StoreFragment) {
                     Log.d("MainActivity", "Refreshing StoreFragment");
                     replaceFragment(new StoreFragment());
                 }
             }
-            
+
             @Override
             public void onError(String errorMessage) {
                 Log.e("MainActivity", "Error creating sample courses: " + errorMessage);
