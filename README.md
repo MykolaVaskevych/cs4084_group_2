@@ -65,6 +65,10 @@
 - Create and manage class schedules
 - View weekly timetable
 - Manage course information
+- Add modules
+- Delete modules
+- Hide or show modules
+- Moving modules between alternative slots
 
 ### Marketplace
 - Buy and sell items
