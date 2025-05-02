@@ -21,6 +21,7 @@ public class Course {
     private String logo;
     private List<String> tags;
     private String author;
+    private String authorId;  // Direct field for authorId for filtering
     private List<Review> reviews;
     private double averageRating;
     private CourseStatistics statistics;
@@ -102,6 +103,14 @@ public class Course {
 
     public void setAuthor(String author) {
         this.author = author;
+    }
+    
+    public String getAuthorId() {
+        return authorId;
+    }
+    
+    public void setAuthorId(String authorId) {
+        this.authorId = authorId;
     }
 
     public List<Review> getReviews() {

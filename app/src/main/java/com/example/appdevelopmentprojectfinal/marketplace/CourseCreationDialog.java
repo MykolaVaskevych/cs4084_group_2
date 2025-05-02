@@ -25,6 +25,7 @@ import com.example.appdevelopmentprojectfinal.R;
 import com.example.appdevelopmentprojectfinal.model.Module;
 import com.example.appdevelopmentprojectfinal.model.Course;
 import com.example.appdevelopmentprojectfinal.utils.AcademicDatabaseManager;
+import com.example.appdevelopmentprojectfinal.utils.YouTubeHelper;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.firebase.auth.FirebaseAuth;
@@ -195,10 +196,125 @@ public class CourseCreationDialog extends DialogFragment {
                     stats.setViewsToday(0);
                     course.setStatistics(stats);
                     
-                    // Create initial lessons list from any available data in the course
+                    // Extract lessons and videos from course content structure
                     List<MarketplaceCourse.Lesson> lessons = new ArrayList<>();
                     
-                    // Add a default lesson if needed - user will edit these
+                    // Extract data from the course's complex content structure
+                    if (loadedCourse.getContent() != null) {
+                        Log.i(TAG, "Course has content structure, extracting data");
+                        
+                        // Extract preview content and video URL
+                        MarketplaceCourse.Preview preview = new MarketplaceCourse.Preview();
+                        
+                        if (loadedCourse.getContent().getPreview() != null) {
+                            Course.Preview loadedPreview = loadedCourse.getContent().getPreview();
+                            
+                            // Set basic preview data
+                            preview.setTitle(loadedPreview.getTitle() != null ? loadedPreview.getTitle() : "Preview");
+                            
+                            // Find text content and video URL in preview items
+                            if (loadedPreview.getItems() != null && !loadedPreview.getItems().isEmpty()) {
+                                StringBuilder previewContent = new StringBuilder();
+                                String previewVideoUrl = null;
+                                
+                                // First, look specifically for video type items to ensure we don't miss them
+                                for (Course.ContentItem item : loadedPreview.getItems()) {
+                                    if (item.getType() != null && "video".equals(item.getType()) && item.getUrl() != null) {
+                                        previewVideoUrl = item.getUrl();
+                                        break; // Use the first video we find
+                                    }
+                                }
+                                
+                                // Then process all text items
+                                for (Course.ContentItem item : loadedPreview.getItems()) {
+                                    
+                                    if (item.getType() != null) {
+                                        if ("text".equals(item.getType()) && item.getContent() != null) {
+                                            // Add text content
+                                            if (previewContent.length() > 0) {
+                                                previewContent.append("\n\n");
+                                            }
+                                            previewContent.append(item.getContent());
+                                        }
+                                    }
+                                }
+                                
+                                // Set the extracted content
+                                if (previewContent.length() > 0) {
+                                    preview.setContent(previewContent.toString());
+                                } else {
+                                    preview.setContent("Preview content");
+                                }
+                                
+                                if (previewVideoUrl != null) {
+                                    preview.setVideoUrl(previewVideoUrl);
+                                }
+                            } else {
+                                preview.setContent("Preview content");
+                            }
+                        } else {
+                            // Default preview
+                            preview.setTitle("Preview");
+                            preview.setContent("Preview content");
+                        }
+                        
+                        course.setPreview(preview);
+                        
+                        // Extract chapters/lessons
+                        if (loadedCourse.getContent().getChapters() != null && 
+                            !loadedCourse.getContent().getChapters().isEmpty()) {
+                            
+                            // Process first chapter as lessons (typical structure)
+                            Course.Chapter firstChapter = loadedCourse.getContent().getChapters().get(0);
+                            if (firstChapter.getItems() != null && !firstChapter.getItems().isEmpty()) {
+                                
+                                // Create a map to organize items by title prefix - this groups text and video items that belong together
+                                Map<String, MarketplaceCourse.Lesson> lessonsByPrefix = new HashMap<>();
+                                
+                                // First pass - organize items by their title prefixes to group related items
+                                for (Course.ContentItem item : firstChapter.getItems()) {
+                                    if (item.getTitle() == null) continue;
+                                    
+                                    // Extract the lesson name from the item title (before the colon)
+                                    String title = item.getTitle();
+                                    String prefix = title;
+                                    if (title.contains(":")) {
+                                        prefix = title.substring(0, title.indexOf(":")).trim();
+                                    }
+                                    
+                                    // Get or create lesson for this prefix
+                                    MarketplaceCourse.Lesson lesson = lessonsByPrefix.get(prefix);
+                                    if (lesson == null) {
+                                        lesson = new MarketplaceCourse.Lesson();
+                                        lesson.setTitle(prefix);
+                                        lessonsByPrefix.put(prefix, lesson);
+                                    }
+                                    
+                                    // Set the appropriate content based on item type
+                                    if (item.getType() != null) {
+                                        if ("text".equals(item.getType()) && item.getContent() != null) {
+                                            lesson.setContent(item.getContent());
+                                        } else if ("video".equals(item.getType()) && item.getUrl() != null) {
+                                            lesson.setVideoUrl(item.getUrl());
+                                        }
+                                    }
+                                }
+                                
+                                // Convert map values to list
+                                for (MarketplaceCourse.Lesson lesson : lessonsByPrefix.values()) {
+                                    
+                                    // Set defaults for missing content
+                                    if (lesson.getContent() == null) {
+                                        lesson.setContent("Lesson content");
+                                    }
+                                    
+                                    lessons.add(lesson);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Add a default lesson if no lessons were found
                     if (lessons.isEmpty()) {
                         MarketplaceCourse.Lesson lesson = new MarketplaceCourse.Lesson();
                         lesson.setTitle("Lesson 1");
@@ -207,12 +323,6 @@ public class CourseCreationDialog extends DialogFragment {
                     }
                     
                     course.setLessons(lessons);
-                    
-                    // Create a basic preview
-                    MarketplaceCourse.Preview preview = new MarketplaceCourse.Preview();
-                    preview.setTitle("Preview");
-                    preview.setContent("Preview content");
-                    course.setPreview(preview);
                     
                     // Populate the form with course data
                     populateForm();
@@ -267,7 +377,10 @@ public class CourseCreationDialog extends DialogFragment {
         if (course.getPreview() != null) {
             etPreviewTitle.setText(course.getPreview().getTitle());
             etPreviewContent.setText(course.getPreview().getContent());
-            etPreviewVideoUrl.setText(course.getPreview().getVideoUrl());
+            
+            // Handle YouTube embed URLs - convert back to regular URLs for editing
+            String videoUrl = convertFromEmbedUrl(course.getPreview().getVideoUrl());
+            etPreviewVideoUrl.setText(videoUrl);
         }
         
         // Set lessons data
@@ -379,6 +492,7 @@ public class CourseCreationDialog extends DialogFragment {
         // Process the video URL - convert to embed format
         String previewVideoUrl = etPreviewVideoUrl.getText().toString().trim();
         if (!previewVideoUrl.isEmpty() && isYoutubeUrl(previewVideoUrl)) {
+            // Convert to embed format using standardized helper
             previewVideoUrl = convertToEmbedUrl(previewVideoUrl);
         }
         preview.setVideoUrl(previewVideoUrl);
@@ -410,7 +524,9 @@ public class CourseCreationDialog extends DialogFragment {
         
         // Set author info in our course object
         course.setAuthor(authorName);
-        course.setAuthorId(authorId);  // We'll need to add this field to MarketplaceCourse
+        course.setAuthorId(authorId);
+        
+        Log.i(TAG, "Setting course author information - name: " + authorName + ", id: " + authorId);
         
         // Convert to Course object for compatibility
         Course convertedCourse = new Course();
@@ -421,11 +537,14 @@ public class CourseCreationDialog extends DialogFragment {
         convertedCourse.setPrice(course.getPrice());
         convertedCourse.setTags(course.getTags());
         convertedCourse.setAuthor(authorName);  // Save readable author name
+        convertedCourse.setAuthorId(authorId); // Set authorId directly for better Firestore filtering
         
-        // We need to add authorId field to store the UUID for permissions
+        // For backward compatibility, also store in additionalFields
         Map<String, Object> additionalFields = new HashMap<>();
         additionalFields.put("authorId", authorId);
         convertedCourse.setAdditionalFields(additionalFields);
+        
+        Log.i(TAG, "Conversion complete, course has authorId: " + convertedCourse.getAuthorId());
         
         // Create statistics
         Course.CourseStatistics stats = new Course.CourseStatistics();
@@ -445,16 +564,26 @@ public class CourseCreationDialog extends DialogFragment {
             
             List<Course.ContentItem> items = new ArrayList<>();
             for (MarketplaceCourse.Lesson lesson : course.getLessons()) {
-                Course.ContentItem item = new Course.ContentItem();
-                item.setTitle(lesson.getTitle());
-                item.setContent(lesson.getContent());
-                item.setType("text");
+                // For each lesson, create separate items for video and text content
                 
+                // If lesson has a video, add it as a video item
                 if (lesson.getVideoUrl() != null && !lesson.getVideoUrl().isEmpty()) {
-                    item.setUrl(lesson.getVideoUrl());
+                    Course.ContentItem videoItem = new Course.ContentItem();
+                    videoItem.setTitle(lesson.getTitle() + ": Video Lecture");
+                    videoItem.setContent(null);
+                    videoItem.setType("video");
+                    videoItem.setUrl(lesson.getVideoUrl());
+                    videoItem.setCaption("Chapter 1 - " + lesson.getTitle());
+                    items.add(videoItem);
                 }
                 
-                items.add(item);
+                // Add lesson text content as separate item
+                Course.ContentItem textItem = new Course.ContentItem();
+                textItem.setTitle(lesson.getTitle() + ": Reading Material");
+                textItem.setContent(lesson.getContent());
+                textItem.setType("text");
+                textItem.setUrl(null);
+                items.add(textItem);
             }
             
             chapter.setItems(items);
@@ -466,16 +595,26 @@ public class CourseCreationDialog extends DialogFragment {
             coursePreview.setTitle(course.getPreview() != null ? course.getPreview().getTitle() : "Preview");
             
             List<Course.ContentItem> previewItems = new ArrayList<>();
-            Course.ContentItem previewItem = new Course.ContentItem();
-            previewItem.setType("text");
-            previewItem.setTitle("Preview");
-            previewItem.setContent(course.getPreview() != null ? course.getPreview().getContent() : "Preview content");
             
-            if (course.getPreview() != null && course.getPreview().getVideoUrl() != null) {
-                previewItem.setUrl(course.getPreview().getVideoUrl());
+            // Add video item first if we have a preview video URL
+            if (course.getPreview() != null && course.getPreview().getVideoUrl() != null && !course.getPreview().getVideoUrl().isEmpty()) {
+                Course.ContentItem videoItem = new Course.ContentItem();
+                videoItem.setType("video");
+                videoItem.setTitle(course.getPreview().getTitle());
+                videoItem.setContent(null);
+                videoItem.setUrl(course.getPreview().getVideoUrl());
+                videoItem.setCaption("A brief introduction to the course");
+                previewItems.add(videoItem);
             }
             
-            previewItems.add(previewItem);
+            // Add text content as separate item
+            Course.ContentItem textItem = new Course.ContentItem();
+            textItem.setType("text");
+            textItem.setTitle("About this Course");
+            textItem.setContent(course.getPreview() != null ? course.getPreview().getContent() : "Preview content");
+            textItem.setUrl(null);
+            
+            previewItems.add(textItem);
             coursePreview.setItems(previewItems);
             content.setPreview(coursePreview);
             
@@ -609,97 +748,48 @@ public class CourseCreationDialog extends DialogFragment {
     }
     
     /**
-     * Strictly validate YouTube URLs - accept common YouTube formats
+     * Validate YouTube URLs using the standardized YouTubeHelper
      * @param url URL to validate
      * @return true if URL is a valid YouTube link
      */
     private boolean isYoutubeUrl(String url) {
-        if (url == null || url.trim().isEmpty()) {
-            return false;
+        boolean isValid = YouTubeHelper.isYoutubeUrl(url);
+        
+        if (!isValid && url != null && !url.trim().isEmpty()) {
+            Log.w(TAG, "Invalid YouTube URL: " + url.trim());
         }
         
-        String trimmedUrl = url.trim();
-        
-        // Match common YouTube URL patterns including:
-        // - youtube.com/watch?v=ID
-        // - youtu.be/ID
-        // - youtube.com/v/ID
-        // - youtube.com/embed/ID
-        boolean isValid = trimmedUrl.matches("^(https?://)?(www\\.)?(youtube\\.com/(watch\\?v=|v/|embed/)|youtu\\.be/)[a-zA-Z0-9_-]{11}.*$");
-        
-        if (!isValid) {
-            Log.w(TAG, "Invalid YouTube URL: " + trimmedUrl);
-        }
         return isValid;
     }
     
     /**
      * Converts any YouTube URL format to the standard embed format
+     * using the standardized YouTubeHelper
      * @param url The original YouTube URL
      * @return Standardized YouTube embed URL
      */
     private String convertToEmbedUrl(String url) {
-        if (url == null || url.trim().isEmpty()) {
-            return "";
-        }
-        
-        String trimmedUrl = url.trim();
-        String videoId = extractYouTubeVideoId(trimmedUrl);
-        
-        if (videoId != null && !videoId.isEmpty()) {
-            return "https://www.youtube.com/embed/" + videoId;
-        }
-        
-        // If we couldn't extract the ID properly, return the original URL
-        return trimmedUrl;
+        return YouTubeHelper.convertToEmbedUrl(url);
     }
     
     /**
-     * Extracts the YouTube video ID from various URL formats
-     * @param url The YouTube URL
-     * @return The video ID or empty string if not found
+     * Converts YouTube embed URLs back to regular watch URLs for editing purposes
+     * @param url The embed URL to convert
+     * @return Regular YouTube watch URL
      */
-    private String extractYouTubeVideoId(String url) {
-        if (url == null || url.trim().isEmpty()) {
-            return "";
+    private String convertFromEmbedUrl(String url) {
+        if (url == null || url.isEmpty() || !url.contains("youtube.com/embed/")) {
+            return url;
         }
         
-        String videoId = "";
-        String trimmedUrl = url.trim();
-        
-        // First, try to match patterns
-        if (trimmedUrl.contains("youtu.be/")) {
-            // Format: youtu.be/ID
-            videoId = trimmedUrl.split("youtu\\.be/")[1];
-        } else if (trimmedUrl.contains("youtube.com/watch")) {
-            // Format: youtube.com/watch?v=ID
-            String[] queryParams = trimmedUrl.split("\\?")[1].split("&");
-            for (String param : queryParams) {
-                if (param.startsWith("v=")) {
-                    videoId = param.substring(2);
-                    break;
-                }
-            }
-        } else if (trimmedUrl.contains("youtube.com/embed/") || trimmedUrl.contains("youtube.com/v/")) {
-            // Format: youtube.com/embed/ID or youtube.com/v/ID
-            String[] parts = trimmedUrl.split("(embed/|v/)");
-            if (parts.length > 1) {
-                videoId = parts[1];
-            }
+        try {
+            // Extract video ID from embed URL and convert to regular URL
+            String videoId = url.replace("https://www.youtube.com/embed/", "").split("\\?")[0];
+            return "https://www.youtube.com/watch?v=" + videoId;
+        } catch (Exception e) {
+            Log.e(TAG, "Error converting from embed URL: " + e.getMessage());
+            return url;
         }
-        
-        // Clean up the ID by removing any URL parameters or extra parts
-        if (videoId.contains("?")) {
-            videoId = videoId.split("\\?")[0];
-        }
-        if (videoId.contains("&")) {
-            videoId = videoId.split("&")[0];
-        }
-        if (videoId.contains("#")) {
-            videoId = videoId.split("#")[0];
-        }
-        
-        return videoId;
     }
 
     private class LessonAdapter extends RecyclerView.Adapter<LessonAdapter.LessonViewHolder> {
@@ -753,7 +843,10 @@ public class CourseCreationDialog extends DialogFragment {
                 // Set lesson data
                 etLessonTitle.setText(lesson.getTitle());
                 etLessonContent.setText(lesson.getContent());
-                etLessonVideoUrl.setText(lesson.getVideoUrl());
+                
+                // Handle YouTube embed URLs - convert back to regular URLs for editing
+                String videoUrl = convertFromEmbedUrl(lesson.getVideoUrl());
+                etLessonVideoUrl.setText(videoUrl);
                 
                 // Set up move buttons visibility
                 btnMoveUp.setVisibility(position > 0 ? View.VISIBLE : View.INVISIBLE);
@@ -779,20 +872,21 @@ public class CourseCreationDialog extends DialogFragment {
                 
                 etLessonVideoUrl.setOnFocusChangeListener((v, hasFocus) -> {
                     if (!hasFocus) {
-                        String videoUrl = etLessonVideoUrl.getText().toString().trim();
+                        String enteredUrl = etLessonVideoUrl.getText().toString().trim();
                         
                         // If URL is provided, validate that it's a YouTube URL
-                        if (!videoUrl.isEmpty()) {
-                            if (!isYoutubeUrl(videoUrl)) {
+                        if (!enteredUrl.isEmpty()) {
+                            if (!isYoutubeUrl(enteredUrl)) {
                                 etLessonVideoUrl.setError("Please enter a valid YouTube URL");
                                 return;
                             }
                             
-                            // Convert to proper embed URL
-                            videoUrl = convertToEmbedUrl(videoUrl);
+                            // Convert to proper embed URL using standardized helper
+                            enteredUrl = convertToEmbedUrl(enteredUrl);
+                            Log.i(TAG, "Lesson " + (position+1) + " video URL: " + enteredUrl);
                         }
                         
-                        lessonList.get(position).setVideoUrl(videoUrl);
+                        lessonList.get(position).setVideoUrl(enteredUrl);
                     }
                 });
             }

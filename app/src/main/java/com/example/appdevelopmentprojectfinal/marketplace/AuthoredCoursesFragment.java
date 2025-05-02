@@ -163,8 +163,10 @@ public class AuthoredCoursesFragment extends Fragment implements CourseAdapter.C
                 // Filter to only include courses authored by current user
                 List<Course> authoredCourses = new ArrayList<>();
                 for (Course course : allCourses) {
-                    if (course.getAuthor() != null && course.getAuthor().equals(authorId)) {
+                    // Check the authorId field (direct field or from additionalFields)
+                    if (course.getAuthorId() != null && course.getAuthorId().equals(authorId)) {
                         authoredCourses.add(course);
+                        Log.v(TAG, "Found authored course matching search query: " + course.getName());
                     }
                 }
                 
@@ -194,6 +196,7 @@ public class AuthoredCoursesFragment extends Fragment implements CourseAdapter.C
         }
         
         String authorId = firebaseUser.getUid();
+        Log.i(TAG, "Loading authored courses for user with ID: " + authorId);
         
         // Load all courses and filter by author
         MarketplaceFirestoreManager.getInstance().loadAuthoredCourses(authorId, new MarketplaceFirestoreManager.OnCoursesLoadedListener() {

@@ -723,94 +723,122 @@ public class CourseDetailDialog extends DialogFragment {
     }
     
     private void prepareExpandedPreview() {
-        Log.d(TAG, "Preparing expanded preview content");
-        
-        if (course == null || course.getContent() == null || course.getContent().getChapters() == null 
-                || course.getContent().getChapters().isEmpty()) {
-            Log.e(TAG, "Cannot prepare expanded preview: course content is missing");
+        if (course == null || course.getContent() == null) {
             expandedPreviewContainer.setVisibility(View.GONE);
             return;
         }
+        
+        if (course.getContent().getPreview() != null && 
+            course.getContent().getPreview().getItems() != null &&
+            !course.getContent().getPreview().getItems().isEmpty()) {
             
-        Course.Chapter firstChapter = course.getContent().getChapters().get(0);
-        Log.i(TAG, "Using first chapter for preview: " + firstChapter.getTitle());
-        tvExpandedChapterTitle.setText(firstChapter.getTitle());
-        
-        StringBuilder contentBuilder = new StringBuilder();
-        String videoTitle = "";
-        String videoUrl = null;
-        
-        if (firstChapter.getItems() != null) {
-            Log.v(TAG, "Processing " + firstChapter.getItems().size() + " items in chapter");
-            for (Course.ContentItem item : firstChapter.getItems()) {
+            Course.Preview preview = course.getContent().getPreview();
+            tvExpandedChapterTitle.setText(preview.getTitle());
+            
+            StringBuilder contentBuilder = new StringBuilder();
+            String videoTitle = preview.getTitle();
+            String videoUrl = null;
+            
+            for (Course.ContentItem item : preview.getItems()) {
                 String itemType = item.getType();
                 if (itemType == null) {
-                    Log.w(TAG, "Skipping item with null type");
                     continue;
                 }
                 
-                Log.v(TAG, "Processing item of type: " + itemType);
-                switch (itemType) {
-                    case "text":
-                        if (item.getContent() != null) {
-                            contentBuilder.append(item.getContent()).append("\n\n");
-                            Log.v(TAG, "Added text content (" + item.getContent().length() + " chars)");
-                        } else {
-                            Log.w(TAG, "Skipping text item with null content");
-                        }
-                        break;
-                        
-                    case "video":
-                        if (item.getTitle() != null) {
-                            videoTitle = item.getTitle();
-                            Log.v(TAG, "Found video title: " + videoTitle);
-                        }
-                        
-                        if (item.getUrl() != null) {
-                            videoUrl = item.getUrl();
-                            Log.v(TAG, "Found video URL: " + videoUrl);
-                        } else {
-                            Log.w(TAG, "Video item has null URL");
-                        }
-                        break;
-                        
-                    default:
-                        Log.w(TAG, "Unhandled content item type: " + itemType);
-                        break;
+                if ("text".equals(itemType) && item.getContent() != null) {
+                    contentBuilder.append(item.getContent()).append("\n\n");
+                } else if ("video".equals(itemType)) {
+                    if (item.getTitle() != null) {
+                        videoTitle = item.getTitle();
+                    }
+                    
+                    if (item.getUrl() != null) {
+                        videoUrl = item.getUrl();
+                    }
                 }
             }
-        } else {
-            Log.w(TAG, "Chapter has no content items");
+            
+            if (videoTitle != null && !videoTitle.isEmpty()) {
+                tvVideoTitle.setText(videoTitle);
+                tvVideoTitle.setVisibility(View.VISIBLE);
+            } else {
+                tvVideoTitle.setVisibility(View.GONE);
+            }
+            
+            if (videoUrl != null) {
+                videoContainer.setVisibility(View.VISIBLE);
+                setUpVideoView(videoUrl);
+            } else {
+                videoContainer.setVisibility(View.GONE);
+            }
+            
+            if (contentBuilder.length() > 0) {
+                tvExpandedContent.setText(contentBuilder.toString());
+                tvExpandedContent.setVisibility(View.VISIBLE);
+            } else {
+                tvExpandedContent.setVisibility(View.GONE);
+            }
         }
-        
-        if (!videoTitle.isEmpty()) {
-            Log.v(TAG, "Setting video title: " + videoTitle);
-            tvVideoTitle.setText(videoTitle);
-            tvVideoTitle.setVisibility(View.VISIBLE);
+        else if (course.getContent().getChapters() != null && !course.getContent().getChapters().isEmpty()) {
+            Course.Chapter firstChapter = course.getContent().getChapters().get(0);
+            tvExpandedChapterTitle.setText(firstChapter.getTitle());
+            
+            StringBuilder contentBuilder = new StringBuilder();
+            String videoTitle = "";
+            String videoUrl = null;
+            
+            if (firstChapter.getItems() != null) {
+                for (Course.ContentItem item : firstChapter.getItems()) {
+                    String itemType = item.getType();
+                    if (itemType == null) {
+                        continue;
+                    }
+                    
+                    switch (itemType) {
+                        case "text":
+                            if (item.getContent() != null) {
+                                contentBuilder.append(item.getContent()).append("\n\n");
+                            }
+                            break;
+                            
+                        case "video":
+                            if (item.getTitle() != null) {
+                                videoTitle = item.getTitle();
+                            }
+                            
+                            if (item.getUrl() != null) {
+                                videoUrl = item.getUrl();
+                            }
+                            break;
+                    }
+                }
+            }
+            
+            if (!videoTitle.isEmpty()) {
+                tvVideoTitle.setText(videoTitle);
+                tvVideoTitle.setVisibility(View.VISIBLE);
+            } else {
+                tvVideoTitle.setVisibility(View.GONE);
+            }
+            
+            if (videoUrl != null) {
+                videoContainer.setVisibility(View.VISIBLE);
+                setUpVideoView(videoUrl);
+            } else {
+                videoContainer.setVisibility(View.GONE);
+            }
+            
+            if (contentBuilder.length() > 0) {
+                tvExpandedContent.setText(contentBuilder.toString());
+                tvExpandedContent.setVisibility(View.VISIBLE);
+            } else {
+                tvExpandedContent.setVisibility(View.GONE);
+            }
         } else {
-            Log.v(TAG, "No video title available, hiding title view");
             tvVideoTitle.setVisibility(View.GONE);
-        }
-        
-        if (videoUrl != null) {
-            Log.d(TAG, "Setting up video with URL: " + videoUrl);
-            videoContainer.setVisibility(View.VISIBLE);
-            setUpVideoView(videoUrl);
-        } else {
-            Log.w(TAG, "No video URL available, hiding video container");
             videoContainer.setVisibility(View.GONE);
-        }
-        
-        if (contentBuilder.length() > 0) {
-            Log.v(TAG, "Setting expanded content text (" + contentBuilder.length() + " chars)");
-            tvExpandedContent.setText(contentBuilder.toString());
-            tvExpandedContent.setVisibility(View.VISIBLE);
-        } else {
-            Log.w(TAG, "No content text available, hiding content view");
             tvExpandedContent.setVisibility(View.GONE);
         }
-        
-        Log.d(TAG, "Expanded preview prepared successfully");
     }
     
     private void setUpVideoView(String videoUrl) {
@@ -819,26 +847,28 @@ public class CourseDetailDialog extends DialogFragment {
         try {
             long startTime = System.currentTimeMillis();
             
-            // Use YouTubeHelper to check if it's a YouTube URL
-            if (YouTubeHelper.isYoutubeUrl(videoUrl)) {
-                Log.d(TAG, "YouTube URL detected, using WebView player");
+            if (videoUrl == null || videoUrl.trim().isEmpty()) {
+                Log.e(TAG, "Video URL is null or empty");
+                videoContainer.setVisibility(View.GONE);
+                return;
+            }
+            
+            String trimmedUrl = videoUrl.trim();
+            
+            if (YouTubeHelper.isYoutubeUrl(trimmedUrl)) {
                 videoView.setVisibility(View.GONE);
                 webViewYoutube.setVisibility(View.VISIBLE);
-                setupYouTubePlayer(videoUrl);
+                
+                String embedUrl = YouTubeHelper.convertToEmbedUrl(trimmedUrl);
+                setupYouTubePlayer(embedUrl);
             } else {
-                // Use regular VideoView for local videos
-                Log.d(TAG, "Local video URL detected, using VideoView");
                 webViewYoutube.setVisibility(View.GONE);
                 videoView.setVisibility(View.VISIBLE);
                 
-                String resourcePath = findLocalVideoResourceForUrl(videoUrl);
-                Log.d(TAG, "Resolved video resource path: " + resourcePath);
-                
+                String resourcePath = findLocalVideoResourceForUrl(trimmedUrl);
                 videoView.setVideoURI(Uri.parse(resourcePath));
-                Log.v(TAG, "Video URI set successfully");
                 
                 videoView.setOnCompletionListener(mp -> {
-                    Log.d(TAG, "Video playback completed");
                     ivPlayButton.setVisibility(View.VISIBLE);
                 });
                 
@@ -846,8 +876,7 @@ public class CourseDetailDialog extends DialogFragment {
             }
             
             ivPlayButton.setVisibility(View.VISIBLE);
-            long endTime = System.currentTimeMillis();
-            Log.d(TAG, "Video setup completed in " + (endTime - startTime) + "ms");
+            Log.d(TAG, "Video setup completed in " + (System.currentTimeMillis() - startTime) + "ms");
         } catch (Exception e) {
             Log.e(TAG, "Failed to set up video view: " + e.getMessage(), e);
             videoContainer.setVisibility(View.GONE);
@@ -856,16 +885,13 @@ public class CourseDetailDialog extends DialogFragment {
     
     private void setupYouTubePlayer(String youtubeUrl) {
         Log.d(TAG, "Setting up YouTube player for URL: " + youtubeUrl);
-        // We don't autoplay the video initially, will wait for play button click
         YouTubeHelper.loadYoutubeVideo(webViewYoutube, youtubeUrl, false);
     }
     
     private String findLocalVideoResourceForUrl(String videoUrl) {
         String defaultResourcePath = "android.resource://" + requireContext().getPackageName() + "/raw/course_preview_demo";
-        Log.d(TAG, "Finding local video resource for URL: " + videoUrl);
         
         if (videoUrl == null || videoUrl.isEmpty()) {
-            Log.w(TAG, "Video URL is null or empty, using default resource");
             return defaultResourcePath;
         }
         
@@ -873,25 +899,17 @@ public class CourseDetailDialog extends DialogFragment {
             String filename = getFilenameFromUrl(videoUrl);
             if (filename != null && !filename.isEmpty()) {
                 String resourceName = convertToResourceName(filename);
-                Log.v(TAG, "Looking for resource name: " + resourceName);
                 
                 int resourceId = findResourceId(resourceName);
                 
                 if (resourceId != 0) {
-                    String resourcePath = "android.resource://" + requireContext().getPackageName() + "/" + resourceId;
-                    Log.i(TAG, "Found matching resource: " + resourceName + " (id: " + resourceId + ")");
-                    return resourcePath;
-                } else {
-                    Log.w(TAG, "Resource not found: " + resourceName);
+                    return "android.resource://" + requireContext().getPackageName() + "/" + resourceId;
                 }
-            } else {
-                Log.w(TAG, "Could not extract filename from URL");
             }
         } catch (Exception e) {
             Log.e(TAG, "Error finding local video resource: " + e.getMessage(), e);
         }
         
-        Log.d(TAG, "Using default video resource");
         return defaultResourcePath;
     }
     
@@ -902,9 +920,7 @@ public class CourseDetailDialog extends DialogFragment {
         
         int lastSlashIndex = url.lastIndexOf('/');
         if (lastSlashIndex != -1 && lastSlashIndex < url.length() - 1) {
-            String filename = url.substring(lastSlashIndex + 1);
-            Log.v(TAG, "Extracted filename from URL: " + filename);
-            return filename;
+            return url.substring(lastSlashIndex + 1);
         }
         
         return url;
@@ -920,9 +936,7 @@ public class CourseDetailDialog extends DialogFragment {
             filename = filename.substring(0, dotIndex);
         }
         
-        String resourceName = filename.toLowerCase().replaceAll("[^a-z0-9_]", "_");
-        Log.v(TAG, "Converted to resource name: " + resourceName);
-        return resourceName;
+        return filename.toLowerCase().replaceAll("[^a-z0-9_]", "_");
     }
     
     private int findResourceId(String resourceName) {
@@ -931,17 +945,14 @@ public class CourseDetailDialog extends DialogFragment {
         
         int resourceId = resources.getIdentifier(resourceName, "raw", packageName);
         if (resourceId != 0) {
-            Log.v(TAG, "Found resource in 'raw' folder: " + resourceId);
             return resourceId;
         }
         
         resourceId = resources.getIdentifier(resourceName, "drawable", packageName);
         if (resourceId != 0) {
-            Log.v(TAG, "Found resource in 'drawable' folder: " + resourceId);
             return resourceId;
         }
         
-        Log.v(TAG, "Resource not found in any folder: " + resourceName);
         return 0;
     }
     
@@ -953,23 +964,11 @@ public class CourseDetailDialog extends DialogFragment {
             long startTime = System.currentTimeMillis();
             
             if (webViewYoutube.getVisibility() == View.VISIBLE) {
-                Log.d(TAG, "Playing YouTube video");
-                // Reload the YouTube video with autoplay enabled
-                String videoUrl = "";
-                if (course != null && course.getContent() != null && 
-                    course.getContent().getChapters() != null && !course.getContent().getChapters().isEmpty()) {
-                    
-                    for (Course.ContentItem item : course.getContent().getChapters().get(0).getItems()) {
-                        if ("video".equals(item.getType()) && item.getUrl() != null) {
-                            videoUrl = item.getUrl();
-                            break;
-                        }
-                    }
-                }
+                String videoUrl = findVideoUrl();
                 
                 if (!videoUrl.isEmpty()) {
-                    // Ensure the URL is a YouTube URL before loading
                     if (YouTubeHelper.isYoutubeUrl(videoUrl)) {
+                        Log.i(TAG, "Loading YouTube video with URL: " + videoUrl);
                         YouTubeHelper.loadYoutubeVideo(webViewYoutube, videoUrl, true);
                     } else {
                         Log.w(TAG, "Not a valid YouTube URL: " + videoUrl);
@@ -978,15 +977,19 @@ public class CourseDetailDialog extends DialogFragment {
                                 Toast.LENGTH_SHORT).show();
                         ivPlayButton.setVisibility(View.VISIBLE);
                     }
+                } else {
+                    Log.w(TAG, "No video URL found");
+                    Toast.makeText(requireContext(), 
+                            getString(R.string.video_loading_error_message, "No video URL found"),
+                            Toast.LENGTH_SHORT).show();
+                    ivPlayButton.setVisibility(View.VISIBLE);
                 }
             } else {
-                Log.d(TAG, "Playing local video");
                 videoView.requestFocus();
                 videoView.start();
             }
             
-            long endTime = System.currentTimeMillis();
-            Log.d(TAG, "Video playback started in " + (endTime - startTime) + "ms");
+            Log.d(TAG, "Video playback started in " + (System.currentTimeMillis() - startTime) + "ms");
         } catch (Exception e) {
             Log.e(TAG, "Error playing video: " + e.getMessage(), e);
             Toast.makeText(requireContext(), 
@@ -994,6 +997,41 @@ public class CourseDetailDialog extends DialogFragment {
                     Toast.LENGTH_SHORT).show();
             ivPlayButton.setVisibility(View.VISIBLE);
         }
+    }
+    
+    private String findVideoUrl() {
+        if (course == null || course.getContent() == null) {
+            return "";
+        }
+        
+        String videoUrl = "";
+        
+        if (course.getContent().getPreview() != null && 
+            course.getContent().getPreview().getItems() != null &&
+            !course.getContent().getPreview().getItems().isEmpty()) {
+            
+            for (Course.ContentItem item : course.getContent().getPreview().getItems()) {
+                if ("video".equals(item.getType()) && item.getUrl() != null && !item.getUrl().isEmpty()) {
+                    return item.getUrl();
+                }
+            }
+        }
+        
+        if (course.getContent().getChapters() != null && 
+            !course.getContent().getChapters().isEmpty()) {
+            
+            Course.Chapter firstChapter = course.getContent().getChapters().get(0);
+            
+            if (firstChapter.getItems() != null) {
+                for (Course.ContentItem item : firstChapter.getItems()) {
+                    if ("video".equals(item.getType()) && item.getUrl() != null && !item.getUrl().isEmpty()) {
+                        return item.getUrl();
+                    }
+                }
+            }
+        }
+        
+        return videoUrl;
     }
     
     private void setupVideoListeners() {

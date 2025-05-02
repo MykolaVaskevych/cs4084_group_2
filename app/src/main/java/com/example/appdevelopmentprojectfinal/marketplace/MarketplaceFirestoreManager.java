@@ -809,6 +809,8 @@ public class MarketplaceFirestoreManager {
         Log.i(TAG, "Loading courses authored by: " + authorId);
         long startTime = System.currentTimeMillis();
         
+        // Use proper authorId field and log the query
+        Log.i(TAG, "Querying Firestore for courses with authorId = " + authorId);
         coursesCollection
             .whereEqualTo("authorId", authorId)
             .get()
