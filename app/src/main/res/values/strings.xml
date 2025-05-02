@@ -34,10 +34,15 @@
     <string name="no_recommended_courses">No courses found matching your interests</string>
     <string name="no_trending_courses">No trending courses available</string>
     <string name="no_owned_courses">You don\'t own any courses yet</string>
+    <string name="no_authored_courses">You haven\'t created any courses yet</string>
     <string name="all_courses">All Courses</string>
     <string name="my_courses">My Courses</string>
+    <string name="authored">Authored</string>
+    <string name="authored_courses">Authored Courses</string>
+    <string name="create_new_course">Create New Course</string>
     <string name="search_courses_hint">Search courses…</string>
     <string name="wallet_balance">Wallet: %s</string>
+    <string name="no_courses_found_for_query">No courses found for \"%s\"</string>
     
     <!-- Course Detail Strings -->
     <string name="preview_content">Preview Content</string>

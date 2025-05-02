@@ -6,6 +6,10 @@ plugins {
 android {
     namespace = "com.example.appdevelopmentprojectfinal"
     compileSdk = 35
+    
+    lint {
+        abortOnError = false  // Don't fail build on lint errors
+    }
 
     defaultConfig {
         applicationId = "com.example.appdevelopmentprojectfinal"

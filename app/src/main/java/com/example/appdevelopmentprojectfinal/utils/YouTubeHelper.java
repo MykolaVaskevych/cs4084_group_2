@@ -58,6 +58,42 @@ public class YouTubeHelper {
     }
 
     /**
+     * Simple check if a string could be a YouTube URL
+     * Note: This only checks if the URL has a basic YouTube format
+     * It cannot verify if the video actually exists - it will simply not load if invalid
+     * 
+     * @param url The URL to check
+     * @return true if the URL appears to be a YouTube URL
+     */
+    public static boolean isYoutubeUrl(String url) {
+        if (url == null || url.trim().isEmpty()) {
+            return false;
+        }
+        
+        String trimmedUrl = url.trim();
+        return trimmedUrl.contains("youtube.com") || trimmedUrl.contains("youtu.be");
+    }
+    
+    /**
+     * Converts any YouTube URL to the standard embed format
+     * 
+     * @param url YouTube URL
+     * @return Embed URL, or original URL if conversion failed
+     */
+    public static String convertToEmbedUrl(String url) {
+        if (url == null || url.trim().isEmpty()) {
+            return "";
+        }
+        
+        String videoId = extractYoutubeVideoId(url.trim());
+        if (videoId != null) {
+            return "https://www.youtube.com/embed/" + videoId;
+        }
+        
+        return url.trim();
+    }
+
+    /**
      * Extract the YouTube video ID from a URL
      * 
      * @param url YouTube URL

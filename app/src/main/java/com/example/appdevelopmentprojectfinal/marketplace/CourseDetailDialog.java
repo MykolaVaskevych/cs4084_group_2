@@ -819,8 +819,8 @@ public class CourseDetailDialog extends DialogFragment {
         try {
             long startTime = System.currentTimeMillis();
             
-            // Check if it's a YouTube URL
-            if (videoUrl.contains("youtube.com") || videoUrl.contains("youtu.be")) {
+            // Use YouTubeHelper to check if it's a YouTube URL
+            if (YouTubeHelper.isYoutubeUrl(videoUrl)) {
                 Log.d(TAG, "YouTube URL detected, using WebView player");
                 videoView.setVisibility(View.GONE);
                 webViewYoutube.setVisibility(View.VISIBLE);
@@ -968,7 +968,16 @@ public class CourseDetailDialog extends DialogFragment {
                 }
                 
                 if (!videoUrl.isEmpty()) {
-                    YouTubeHelper.loadYoutubeVideo(webViewYoutube, videoUrl, true);
+                    // Ensure the URL is a YouTube URL before loading
+                    if (YouTubeHelper.isYoutubeUrl(videoUrl)) {
+                        YouTubeHelper.loadYoutubeVideo(webViewYoutube, videoUrl, true);
+                    } else {
+                        Log.w(TAG, "Not a valid YouTube URL: " + videoUrl);
+                        Toast.makeText(requireContext(), 
+                                getString(R.string.video_loading_error_message, "Invalid YouTube URL"),
+                                Toast.LENGTH_SHORT).show();
+                        ivPlayButton.setVisibility(View.VISIBLE);
+                    }
                 }
             } else {
                 Log.d(TAG, "Playing local video");

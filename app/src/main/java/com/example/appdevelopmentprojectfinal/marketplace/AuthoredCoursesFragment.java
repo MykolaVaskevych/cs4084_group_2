@@ -5,6 +5,7 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -18,6 +19,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.appdevelopmentprojectfinal.R;
 import com.example.appdevelopmentprojectfinal.model.Course;
 import com.example.appdevelopmentprojectfinal.model.User;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
@@ -28,9 +30,9 @@ import java.util.Currency;
 import java.util.List;
 import java.util.Locale;
 
-public class AllCoursesFragment extends Fragment implements CourseAdapter.CourseClickListener {
+public class AuthoredCoursesFragment extends Fragment implements CourseAdapter.CourseClickListener {
 
-    private static final String TAG = "AllCoursesFragment";
+    private static final String TAG = "AuthoredCoursesFragment";
     
     private TextView tvWalletBalance;
     private TextView tvSectionTitle;
@@ -39,6 +41,7 @@ public class AllCoursesFragment extends Fragment implements CourseAdapter.Course
     private LinearLayout emptyView;
     private TextView tvEmptyMessage;
     private View loadingView;
+    private FloatingActionButton fabAddCourse;
     
     private CourseAdapter adapter;
     
@@ -51,7 +54,7 @@ public class AllCoursesFragment extends Fragment implements CourseAdapter.Course
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        Log.i(TAG, "Initializing AllCoursesFragment");
+        Log.i(TAG, "Initializing AuthoredCoursesFragment");
         
         tvWalletBalance = view.findViewById(R.id.tvWalletBalance);
         tvSectionTitle = view.findViewById(R.id.tvSectionTitle);
@@ -61,13 +64,35 @@ public class AllCoursesFragment extends Fragment implements CourseAdapter.Course
         tvEmptyMessage = view.findViewById(R.id.tvEmptyMessage);
         loadingView = view.findViewById(R.id.loadingView);
         
-        // Hide any sample course creation button that might be in the layout
-        View btnCreateCourses = view.findViewById(R.id.btnCreateCourses);
+        // Repurpose the sample course creation button
+        Button btnCreateCourses = view.findViewById(R.id.btnCreateCourses);
         if (btnCreateCourses != null) {
-            btnCreateCourses.setVisibility(View.GONE);
+            btnCreateCourses.setText(R.string.create_new_course);
+            btnCreateCourses.setVisibility(View.VISIBLE);
+            btnCreateCourses.setOnClickListener(v -> openCourseCreationDialog());
         }
         
-        tvSectionTitle.setText(getString(R.string.all_courses));
+        // Add a floating action button for adding new courses
+        ViewGroup rootView = (ViewGroup) view.getParent();
+        fabAddCourse = new FloatingActionButton(requireContext());
+        fabAddCourse.setImageResource(android.R.drawable.ic_input_add);
+        fabAddCourse.setContentDescription("Add Course");
+        
+        ViewGroup.MarginLayoutParams params = new ViewGroup.MarginLayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, 
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        params.setMargins(0, 0, 32, 32); // right, bottom margins
+        fabAddCourse.setLayoutParams(params);
+        
+        // Position the FAB at the bottom right
+        if (rootView instanceof ViewGroup) {
+            fabAddCourse.setUseCompatPadding(true);
+            rootView.addView(fabAddCourse);
+            fabAddCourse.setOnClickListener(v -> openCourseCreationDialog());
+        }
+        
+        tvSectionTitle.setText(R.string.authored_courses);
         
         adapter = new CourseAdapter(new ArrayList<>(), this);
         recyclerView.setAdapter(adapter);
@@ -83,7 +108,7 @@ public class AllCoursesFragment extends Fragment implements CourseAdapter.Course
         FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
         if (firebaseUser == null) {
             Log.e(TAG, "Cannot initialize user data: no authenticated user");
-            Toast.makeText(getContext(), "Please login to view courses", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getContext(), "Please login to view your authored courses", Toast.LENGTH_SHORT).show();
             showLoading(false);
             updateCoursesList(new ArrayList<>());
             return;
@@ -98,7 +123,7 @@ public class AllCoursesFragment extends Fragment implements CourseAdapter.Course
                 
                 updateWalletBalance();
                 setUpSearch();
-                loadAllCourses();
+                loadAuthoredCourses();
             }
             
             @Override
@@ -114,96 +139,78 @@ public class AllCoursesFragment extends Fragment implements CourseAdapter.Course
     
     private void setUpSearch() {
         etSearch.setOnEditorActionListener((v, actionId, event) -> {
-            String query = etSearch.getText().toString();
-            Log.i(TAG, "Search action triggered with query: \"" + query + "\"");
-            searchCourses(query);
+            searchCourses(etSearch.getText().toString());
             return true;
-        });
-        
-        // Add a clear button to empty the search field
-        etSearch.setOnFocusChangeListener((v, hasFocus) -> {
-            if (hasFocus && etSearch.getText().length() > 0) {
-                // Show clear button or handle clearing
-                Log.v(TAG, "Search field focused with content");
-            }
         });
     }
     
     private void searchCourses(String query) {
         showLoading(true);
         
-        // Check if query is empty or just whitespace
-        if (query == null || query.trim().isEmpty()) {
-            Log.i(TAG, "Empty search query, loading all courses");
-            loadAllCourses();
+        // Get current user
+        FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (firebaseUser == null) {
+            showLoading(false);
+            updateCoursesList(new ArrayList<>());
             return;
         }
         
-        Log.i(TAG, "Performing search for query: \"" + query + "\"");
+        String authorId = firebaseUser.getUid();
+        
         MarketplaceFirestoreManager.getInstance().searchCourses(query, new MarketplaceFirestoreManager.OnCoursesLoadedListener() {
             @Override
-            public void onCoursesLoaded(List<Course> courses) {
-                if (!isAdded()) {
-                    Log.w(TAG, "Fragment not attached, aborting UI update");
-                    return;
+            public void onCoursesLoaded(List<Course> allCourses) {
+                // Filter to only include courses authored by current user
+                List<Course> authoredCourses = new ArrayList<>();
+                for (Course course : allCourses) {
+                    if (course.getAuthor() != null && course.getAuthor().equals(authorId)) {
+                        authoredCourses.add(course);
+                    }
                 }
                 
                 showLoading(false);
-                Log.i(TAG, "Search completed with " + courses.size() + " results");
-                
-                // Add the search term to the UI when showing results
-                if (courses.isEmpty()) {
-                    updateCoursesListWithSearchQuery(courses, query);
-                } else {
-                    updateCoursesList(courses);
-                }
+                updateCoursesList(authoredCourses);
             }
 
             @Override
             public void onError(String errorMessage) {
-                if (!isAdded()) {
-                    Log.w(TAG, "Fragment not attached, aborting error handling");
-                    return;
-                }
-                
                 showLoading(false);
-                Log.e(TAG, "Search error: " + errorMessage);
                 Toast.makeText(getContext(), "Search error: " + errorMessage, Toast.LENGTH_SHORT).show();
                 updateCoursesList(new ArrayList<>());
             }
         });
     }
     
-    /**
-     * Updates the course list with an indication of the search term that was used
-     */
-    private void updateCoursesListWithSearchQuery(List<Course> courses, String query) {
-        updateCoursesList(courses);
-        
-        // If no courses were found, update the empty message to include the search term
-        if (courses.isEmpty() && tvEmptyMessage != null) {
-            tvEmptyMessage.setText(getString(R.string.no_courses_found_for_query, query));
-        }
-    }
-    
-    private void loadAllCourses() {
+    private void loadAuthoredCourses() {
         showLoading(true);
         
-        MarketplaceFirestoreManager.getInstance().loadAllCourses(new MarketplaceFirestoreManager.OnCoursesLoadedListener() {
+        // Get current user
+        FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (firebaseUser == null) {
+            Log.e(TAG, "Cannot load authored courses: no authenticated user");
+            showLoading(false);
+            updateCoursesList(new ArrayList<>());
+            return;
+        }
+        
+        String authorId = firebaseUser.getUid();
+        
+        // Load all courses and filter by author
+        MarketplaceFirestoreManager.getInstance().loadAuthoredCourses(authorId, new MarketplaceFirestoreManager.OnCoursesLoadedListener() {
             @Override
-            public void onCoursesLoaded(List<Course> courses) {
+            public void onCoursesLoaded(List<Course> authoredCourses) {
                 showLoading(false);
-                Log.d(TAG, "Loaded " + courses.size() + " courses");
-                updateCoursesList(courses);
+                Log.i(TAG, "Loaded " + authoredCourses.size() + " authored courses");
+                updateCoursesList(authoredCourses);
             }
-
+            
             @Override
             public void onError(String errorMessage) {
-                Log.e(TAG, "Error loading courses: " + errorMessage);
+                Log.e(TAG, "Error loading authored courses: " + errorMessage);
                 
                 showLoading(false);
                 if (getContext() != null) {
-                    Toast.makeText(getContext(), "Failed to load courses", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getContext(), "Failed to load your authored courses", Toast.LENGTH_SHORT).show();
                 }
                 updateCoursesList(new ArrayList<>());
             }
@@ -224,7 +231,7 @@ public class AllCoursesFragment extends Fragment implements CourseAdapter.Course
         if (courses.isEmpty()) {
             recyclerView.setVisibility(View.GONE);
             emptyView.setVisibility(View.VISIBLE);
-            tvEmptyMessage.setText(getString(R.string.no_courses_found));
+            tvEmptyMessage.setText(R.string.no_authored_courses);
         } else {
             recyclerView.setVisibility(View.VISIBLE);
             emptyView.setVisibility(View.GONE);
@@ -267,29 +274,48 @@ public class AllCoursesFragment extends Fragment implements CourseAdapter.Course
                 Log.e(TAG, "Error fetching fresh wallet balance: " + e.getMessage()));
     }
     
+    private void openCourseCreationDialog() {
+        // Open dialog for creating/editing a course
+        CourseCreationDialog dialog = new CourseCreationDialog();
+        dialog.show(getParentFragmentManager(), "CourseCreation");
+        dialog.setCourseCreatedListener(() -> {
+            // Refresh the list when a course is created or updated
+            loadAuthoredCourses();
+        });
+    }
+    
     @Override
     public void onCourseClicked(Course course) {
-        CourseDetailDialog dialog = CourseDetailDialog.newInstance(course.getId());
-        dialog.show(getParentFragmentManager(), "CourseDetail");
-        
-        dialog.setPurchaseCompletedListener(() -> {
-            loadAllCourses();
-            updateWalletBalance();
+        // When a course is clicked, open it for editing in the course creation dialog
+        CourseCreationDialog dialog = CourseCreationDialog.newInstance(course.getId());
+        dialog.show(getParentFragmentManager(), "CourseEdit");
+        dialog.setCourseCreatedListener(() -> {
+            // Refresh the list when a course is updated
+            loadAuthoredCourses();
         });
     }
     
     @Override
     public void onResume() {
         super.onResume();
-        Log.d(TAG, "AllCoursesFragment resumed");
+        Log.d(TAG, "AuthoredCoursesFragment resumed");
         
         // Only refresh data if we already have a user loaded
         if (MarketplaceFirestoreManager.getInstance().getCurrentUser() != null) {
-            loadAllCourses();
+            loadAuthoredCourses();
             updateWalletBalance();
         } else {
             Log.w(TAG, "Cannot refresh courses: no user loaded");
             initializeUserData();
+        }
+    }
+    
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        // Remove FAB when fragment is destroyed
+        if (fabAddCourse != null && fabAddCourse.getParent() != null) {
+            ((ViewGroup) fabAddCourse.getParent()).removeView(fabAddCourse);
         }
     }
     
@@ -298,7 +324,7 @@ public class AllCoursesFragment extends Fragment implements CourseAdapter.Course
      */
     public void refreshData() {
         Log.i(TAG, "Forcing data refresh");
-        loadAllCourses();
+        loadAuthoredCourses();
         updateWalletBalance();
     }
 }

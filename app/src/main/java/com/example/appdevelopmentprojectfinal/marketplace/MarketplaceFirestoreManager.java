@@ -213,19 +213,26 @@ public class MarketplaceFirestoreManager {
     }
     
     public void searchCourses(String query, final OnCoursesLoadedListener listener) {
-        if (query == null || query.isEmpty()) {
+        if (query == null || query.trim().isEmpty()) {
             loadAllCourses(listener);
             return;
         }
         
-        Log.i(TAG, "Searching courses with query: " + query);
+        // Trim and normalize the query
+        String trimmedQuery = query.trim();
+        Log.i(TAG, "Searching courses with query: \"" + trimmedQuery + "\"");
         long startTime = System.currentTimeMillis();
-        String searchLower = query.toLowerCase();
+        String searchLower = trimmedQuery.toLowerCase();
         
         coursesCollection
             .get()
             .addOnSuccessListener(queryDocumentSnapshots -> {
                 List<Course> matchingCourses = new ArrayList<>();
+                
+                // Log the total number of courses being searched
+                int totalCourses = queryDocumentSnapshots.size();
+                Log.d(TAG, "Searching through " + totalCourses + " total courses");
+                
                 for (QueryDocumentSnapshot document : queryDocumentSnapshots) {
                     Course course = document.toObject(Course.class);
                     if (course != null) {
@@ -234,18 +241,25 @@ public class MarketplaceFirestoreManager {
                         // Check if course matches search query
                         boolean matches = false;
                         
+                        // Check name match
                         if (course.getName() != null && course.getName().toLowerCase().contains(searchLower)) {
                             matches = true;
                             Log.v(TAG, "Course matches by name: " + course.getName());
-                        } else if (course.getDescription() != null && course.getDescription().toLowerCase().contains(searchLower)) {
+                        } 
+                        // Check description match
+                        else if (course.getDescription() != null && course.getDescription().toLowerCase().contains(searchLower)) {
                             matches = true;
                             Log.v(TAG, "Course matches by description: " + course.getId());
-                        } else if (course.getAuthor() != null && course.getAuthor().toLowerCase().contains(searchLower)) {
+                        } 
+                        // Check author match
+                        else if (course.getAuthor() != null && course.getAuthor().toLowerCase().contains(searchLower)) {
                             matches = true;
                             Log.v(TAG, "Course matches by author: " + course.getAuthor());
-                        } else if (course.getTags() != null) {
+                        } 
+                        // Check tags match
+                        else if (course.getTags() != null) {
                             for (String tag : course.getTags()) {
-                                if (tag.toLowerCase().contains(searchLower)) {
+                                if (tag != null && tag.toLowerCase().contains(searchLower)) {
                                     matches = true;
                                     Log.v(TAG, "Course matches by tag: " + tag);
                                     break;
@@ -253,6 +267,7 @@ public class MarketplaceFirestoreManager {
                             }
                         }
                         
+                        // If any match is found, add the course to results
                         if (matches) {
                             matchingCourses.add(course);
                         }
@@ -260,7 +275,8 @@ public class MarketplaceFirestoreManager {
                 }
                 
                 long endTime = System.currentTimeMillis();
-                Log.i(TAG, "Found " + matchingCourses.size() + " courses matching query: " + query + " in " + (endTime - startTime) + "ms");
+                Log.i(TAG, "Found " + matchingCourses.size() + " courses matching query: \"" + trimmedQuery + 
+                        "\" in " + (endTime - startTime) + "ms");
                 
                 if (listener != null) {
                     listener.onCoursesLoaded(matchingCourses);
@@ -774,5 +790,157 @@ public class MarketplaceFirestoreManager {
         boolean owned = currentUser.getOwnedCourses().contains(courseId);
         Log.v(TAG, "User " + (owned ? "owns" : "does not own") + " course: " + courseId);
         return owned;
+    }
+    
+    /**
+     * Loads courses authored by a specific user
+     * @param authorId the user ID who authored the courses
+     * @param listener callback for handling loaded courses
+     */
+    public void loadAuthoredCourses(String authorId, final OnCoursesLoadedListener listener) {
+        if (authorId == null || authorId.isEmpty()) {
+            Log.e(TAG, "Cannot load authored courses: authorId is null or empty");
+            if (listener != null) {
+                listener.onError("Invalid author ID");
+            }
+            return;
+        }
+        
+        Log.i(TAG, "Loading courses authored by: " + authorId);
+        long startTime = System.currentTimeMillis();
+        
+        coursesCollection
+            .whereEqualTo("authorId", authorId)
+            .get()
+            .addOnSuccessListener(queryDocumentSnapshots -> {
+                List<Course> courses = new ArrayList<>();
+                for (QueryDocumentSnapshot document : queryDocumentSnapshots) {
+                    Course course = document.toObject(Course.class);
+                    if (course != null) {
+                        course.setId(document.getId());
+                        courses.add(course);
+                        Log.v(TAG, "Loaded authored course: " + course.getId() + " - " + course.getName());
+                    }
+                }
+                
+                long endTime = System.currentTimeMillis();
+                Log.i(TAG, "Loaded " + courses.size() + " authored courses in " + (endTime - startTime) + "ms");
+                
+                if (listener != null) {
+                    listener.onCoursesLoaded(courses);
+                }
+            })
+            .addOnFailureListener(e -> {
+                Log.e(TAG, "Error loading authored courses: " + e.getMessage(), e);
+                if (listener != null) {
+                    listener.onError(e.getMessage());
+                }
+            });
+    }
+    
+    /**
+     * Creates or updates a course, handling content validation and author assignment
+     * @param course the course to save
+     * @param listener callback for operation status
+     */
+    public void createOrUpdateCourse(Course course, final OnCourseOperationListener listener) {
+        // This method is a wrapper around saveCourse that handles author verification
+        saveCourse(course, listener);
+    }
+    
+    /**
+     * Helper method to save a course document to Firestore
+     */
+    private void saveCourseDocument(Course course, final OnCourseOperationListener listener) {
+        long startTime = System.currentTimeMillis();
+        
+        coursesCollection.document(course.getId())
+            .set(course)
+            .addOnSuccessListener(aVoid -> {
+                long endTime = System.currentTimeMillis();
+                Log.i(TAG, "Course saved successfully in " + (endTime - startTime) + "ms");
+                
+                if (listener != null) {
+                    listener.onSuccess();
+                }
+            })
+            .addOnFailureListener(e -> {
+                Log.e(TAG, "Error saving course: " + e.getMessage(), e);
+                
+                if (listener != null) {
+                    listener.onError(e.getMessage());
+                }
+            });
+    }
+    
+    /**
+     * Deletes a course if the current user is the author
+     * @param courseId the ID of the course to delete
+     * @param listener callback for operation status
+     */
+    public void deleteCourse(String courseId, final OnCourseOperationListener listener) {
+        if (courseId == null || courseId.isEmpty()) {
+            Log.e(TAG, "Cannot delete course: courseId is null or empty");
+            if (listener != null) {
+                listener.onError("Invalid course ID");
+            }
+            return;
+        }
+        
+        // Get current Firebase user
+        FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (firebaseUser == null) {
+            Log.e(TAG, "Cannot delete course: no authenticated user");
+            if (listener != null) {
+                listener.onError("You must be logged in to delete a course");
+            }
+            return;
+        }
+        
+        String userId = firebaseUser.getUid();
+        
+        Log.i(TAG, "Attempting to delete course: " + courseId);
+        
+        // First verify the user is the author of the course
+        coursesCollection.document(courseId).get()
+            .addOnSuccessListener(documentSnapshot -> {
+                if (documentSnapshot.exists()) {
+                    String authorId = documentSnapshot.getString("author");
+                    
+                    if (authorId == null || !authorId.equals(userId)) {
+                        Log.e(TAG, "User " + userId + " is not authorized to delete course " + courseId);
+                        if (listener != null) {
+                            listener.onError("You are not authorized to delete this course");
+                        }
+                        return;
+                    }
+                    
+                    // Proceed with the deletion
+                    coursesCollection.document(courseId).delete()
+                        .addOnSuccessListener(aVoid -> {
+                            Log.i(TAG, "Course deleted successfully: " + courseId);
+                            if (listener != null) {
+                                listener.onSuccess();
+                            }
+                        })
+                        .addOnFailureListener(e -> {
+                            Log.e(TAG, "Error deleting course: " + e.getMessage(), e);
+                            if (listener != null) {
+                                listener.onError("Error deleting course: " + e.getMessage());
+                            }
+                        });
+                } else {
+                    Log.e(TAG, "Course to delete not found: " + courseId);
+                    if (listener != null) {
+                        listener.onError("Course not found");
+                    }
+                }
+            })
+            .addOnFailureListener(e -> {
+                Log.e(TAG, "Error verifying course author: " + e.getMessage(), e);
+                if (listener != null) {
+                    listener.onError("Error verifying course author: " + e.getMessage());
+                }
+            });
     }
 }

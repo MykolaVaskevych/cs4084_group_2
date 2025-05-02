@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    app:cardElevation="1dp"
+    app:cardCornerRadius="8dp"
+    android:layout_marginTop="4dp"
+    android:layout_marginBottom="4dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <!-- Lesson header with title and actions -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:id="@+id/tvLessonNumber"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Lesson 1"
+                android:textStyle="bold"
+                android:layout_gravity="center_vertical" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <ImageButton
+                android:id="@+id/btnMoveUp"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:src="@android:drawable/arrow_up_float"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Move lesson up" />
+
+            <ImageButton
+                android:id="@+id/btnMoveDown"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:src="@android:drawable/arrow_down_float"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Move lesson down" />
+
+            <ImageButton
+                android:id="@+id/btnDeleteLesson"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:src="@android:drawable/ic_menu_delete"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Delete lesson" />
+        </LinearLayout>
+
+        <!-- Lesson Title -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etLessonTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Lesson Title" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Lesson Content -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etLessonContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Lesson Content"
+                android:inputType="textMultiLine"
+                android:minLines="3" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Video URL -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etLessonVideoUrl"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Video URL (YouTube)"
+                android:inputType="textUri" />
+        </com.google.android.material.textfield.TextInputLayout>
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

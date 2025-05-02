@@ -1,32 +1,36 @@
-package com.example.appdevelopmentprojectfinal.model;
+package com.example.appdevelopmentprojectfinal.marketplace;
 
 import android.util.Log;
 
 import com.google.firebase.firestore.Exclude;
 import com.google.firebase.firestore.IgnoreExtraProperties;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
+/**
+ * Model class for courses in the marketplace with expanded learning content structure
+ */
 @IgnoreExtraProperties
-public class Course {
-    private static final String TAG = "Course";
+public class MarketplaceCourse {
+    private static final String TAG = "MarketplaceCourse";
     
     private String id;
     private String name;
     private String relatedModule;
     private String description;
-    private CourseContent content;
     private double price;
     private String logo;
     private List<String> tags;
     private String author;
+    private String authorId;  // Store the user UUID for ownership/permissions
     private List<Review> reviews;
     private double averageRating;
     private CourseStatistics statistics;
-    private Map<String, Object> additionalFields;
+    private List<Lesson> lessons;
+    private Preview preview;
 
-    public Course() {
+    public MarketplaceCourse() {
         // Empty constructor required for Firestore deserialization
     }
 
@@ -64,14 +68,6 @@ public class Course {
         this.description = description;
     }
 
-    public CourseContent getContent() {
-        return content;
-    }
-
-    public void setContent(CourseContent content) {
-        this.content = content;
-    }
-
     public double getPrice() {
         return price;
     }
@@ -103,6 +99,14 @@ public class Course {
     public void setAuthor(String author) {
         this.author = author;
     }
+    
+    public String getAuthorId() {
+        return authorId;
+    }
+    
+    public void setAuthorId(String authorId) {
+        this.authorId = authorId;
+    }
 
     public List<Review> getReviews() {
         return reviews;
@@ -128,12 +132,20 @@ public class Course {
         this.statistics = statistics;
     }
     
-    public Map<String, Object> getAdditionalFields() {
-        return additionalFields;
+    public List<Lesson> getLessons() {
+        return lessons;
     }
-
-    public void setAdditionalFields(Map<String, Object> additionalFields) {
-        this.additionalFields = additionalFields;
+    
+    public void setLessons(List<Lesson> lessons) {
+        this.lessons = lessons;
+    }
+    
+    public Preview getPreview() {
+        return preview;
+    }
+    
+    public void setPreview(Preview preview) {
+        this.preview = preview;
     }
 
     // Helper method to get the module code from the related module
@@ -143,136 +155,135 @@ public class Course {
         Log.v(TAG, "Getting module code for course " + id + ": " + moduleCode);
         return moduleCode;
     }
+    
+    /**
+     * Adds a new lesson to the course
+     * @param lesson the lesson to add
+     * @return true if added successfully, false otherwise
+     */
+    @Exclude
+    public boolean addLesson(Lesson lesson) {
+        if (lesson == null) {
+            return false;
+        }
+        
+        if (lessons == null) {
+            lessons = new ArrayList<>();
+        }
+        
+        return lessons.add(lesson);
+    }
+    
+    /**
+     * Removes a lesson at the specified index
+     * @param index the index of the lesson to remove
+     * @return the removed lesson or null if invalid index
+     */
+    @Exclude
+    public Lesson removeLesson(int index) {
+        if (lessons == null || index < 0 || index >= lessons.size()) {
+            return null;
+        }
+        
+        return lessons.remove(index);
+    }
+    
+    /**
+     * Updates an existing lesson at the specified index
+     * @param index the index of the lesson to update
+     * @param lesson the new lesson data
+     * @return true if updated successfully, false otherwise
+     */
+    @Exclude
+    public boolean updateLesson(int index, Lesson lesson) {
+        if (lessons == null || lesson == null || index < 0 || index >= lessons.size()) {
+            return false;
+        }
+        
+        lessons.set(index, lesson);
+        return true;
+    }
 
     // Inner classes for nested objects
-    @IgnoreExtraProperties
-    public static class CourseContent {
-        private List<Chapter> chapters;
-        private Preview preview;
-
-        public CourseContent() {
-            // Empty constructor required for Firestore deserialization
-        }
-
-        public List<Chapter> getChapters() {
-            return chapters;
-        }
-
-        public void setChapters(List<Chapter> chapters) {
-            this.chapters = chapters;
-        }
-
-        public Preview getPreview() {
-            return preview;
-        }
-
-        public void setPreview(Preview preview) {
-            this.preview = preview;
-        }
-    }
 
     @IgnoreExtraProperties
-    public static class Chapter {
-        private String title;
-        private List<ContentItem> items;
-
-        public Chapter() {
-            // Empty constructor required for Firestore deserialization
-        }
-
-        public String getTitle() {
-            return title;
-        }
-
-        public void setTitle(String title) {
-            this.title = title;
-        }
-
-        public List<ContentItem> getItems() {
-            return items;
-        }
-
-        public void setItems(List<ContentItem> items) {
-            this.items = items;
-        }
-    }
-
-    @IgnoreExtraProperties
-    public static class Preview {
-        private String title;
-        private List<ContentItem> items;
-
-        public Preview() {
-            // Empty constructor required for Firestore deserialization
-        }
-
-        public String getTitle() {
-            return title;
-        }
-
-        public void setTitle(String title) {
-            this.title = title;
-        }
-
-        public List<ContentItem> getItems() {
-            return items;
-        }
-
-        public void setItems(List<ContentItem> items) {
-            this.items = items;
-        }
-    }
-
-    @IgnoreExtraProperties
-    public static class ContentItem {
-        private String type;
-        private String url;
+    public static class Lesson {
         private String title;
         private String content;
-        private String caption;
-
-        public ContentItem() {
+        private String videoUrl; // YouTube video URL - optional
+        
+        public Lesson() {
             // Empty constructor required for Firestore deserialization
         }
-
-        public String getType() {
-            return type;
+        
+        public Lesson(String title, String content) {
+            this.title = title;
+            this.content = content;
         }
-
-        public void setType(String type) {
-            this.type = type;
+        
+        public Lesson(String title, String content, String videoUrl) {
+            this.title = title;
+            this.content = content;
+            this.videoUrl = videoUrl;
         }
-
-        public String getUrl() {
-            return url;
-        }
-
-        public void setUrl(String url) {
-            this.url = url;
-        }
-
+        
         public String getTitle() {
             return title;
         }
-
+        
         public void setTitle(String title) {
             this.title = title;
         }
-
+        
         public String getContent() {
             return content;
         }
-
+        
         public void setContent(String content) {
             this.content = content;
         }
-
-        public String getCaption() {
-            return caption;
+        
+        public String getVideoUrl() {
+            return videoUrl;
         }
-
-        public void setCaption(String caption) {
-            this.caption = caption;
+        
+        public void setVideoUrl(String videoUrl) {
+            this.videoUrl = videoUrl;
+        }
+    }
+    
+    @IgnoreExtraProperties
+    public static class Preview {
+        private String title;
+        private String content;
+        private String videoUrl;
+        
+        public Preview() {
+            // Empty constructor required for Firestore deserialization
+        }
+        
+        public String getTitle() {
+            return title;
+        }
+        
+        public void setTitle(String title) {
+            this.title = title;
+        }
+        
+        public String getContent() {
+            return content;
+        }
+        
+        public void setContent(String content) {
+            this.content = content;
+        }
+        
+        public String getVideoUrl() {
+            return videoUrl;
+        }
+        
+        public void setVideoUrl(String videoUrl) {
+            this.videoUrl = videoUrl;
         }
     }
 

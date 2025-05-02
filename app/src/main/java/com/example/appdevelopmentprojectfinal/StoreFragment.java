@@ -17,6 +17,7 @@ import androidx.viewpager2.widget.ViewPager2;
 import com.example.appdevelopmentprojectfinal.marketplace.MarketplaceFirestoreManager;
 import com.example.appdevelopmentprojectfinal.marketplace.AllCoursesFragment;
 import com.example.appdevelopmentprojectfinal.marketplace.OwnedCoursesFragment;
+import com.example.appdevelopmentprojectfinal.marketplace.AuthoredCoursesFragment;
 import com.example.appdevelopmentprojectfinal.model.User;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
@@ -148,6 +149,9 @@ public class StoreFragment extends Fragment {
                 case 1:
                     tab.setText(getString(R.string.owned));
                     break;
+                case 2:
+                    tab.setText(getString(R.string.authored));
+                    break;
             }
         }).attach();
         
@@ -189,6 +193,12 @@ public class StoreFragment extends Fragment {
                     if (fragment instanceof OwnedCoursesFragment) {
                         ((OwnedCoursesFragment) fragment).refreshData();
                     }
+                } else if (position == 2) {
+                    // Refresh Authored Courses tab
+                    Fragment fragment = getChildFragmentManager().findFragmentByTag("f" + position);
+                    if (fragment instanceof AuthoredCoursesFragment) {
+                        ((AuthoredCoursesFragment) fragment).refreshData();
+                    }
                 }
             }
         });
@@ -210,6 +220,8 @@ public class StoreFragment extends Fragment {
                     return new AllCoursesFragment();
                 case 1:
                     return new OwnedCoursesFragment();
+                case 2:
+                    return new AuthoredCoursesFragment();
                 default:
                     return new AllCoursesFragment();
             }
@@ -217,7 +229,7 @@ public class StoreFragment extends Fragment {
 
         @Override
         public int getItemCount() {
-            return 2; // Number of tabs (All and Owned)
+            return 3; // Number of tabs (All, Owned, and Authored)
         }
     }
     

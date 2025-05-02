@@ -114,44 +114,94 @@ public class OwnedCoursesFragment extends Fragment implements CourseAdapter.Cour
     
     private void setUpSearch() {
         etSearch.setOnEditorActionListener((v, actionId, event) -> {
-            searchCourses(etSearch.getText().toString());
+            String query = etSearch.getText().toString();
+            Log.i(TAG, "Search action triggered with query: \"" + query + "\"");
+            searchCourses(query);
             return true;
+        });
+        
+        // Add a clear button to empty the search field
+        etSearch.setOnFocusChangeListener((v, hasFocus) -> {
+            if (hasFocus && etSearch.getText().length() > 0) {
+                // Show clear button or handle clearing
+                Log.v(TAG, "Search field focused with content");
+            }
         });
     }
     
     private void searchCourses(String query) {
         showLoading(true);
         
-        // Get current user to check owned courses
-        User currentUser = MarketplaceFirestoreManager.getInstance().getCurrentUser();
-        if (currentUser == null || currentUser.getOwnedCourses() == null || currentUser.getOwnedCourses().isEmpty()) {
-            showLoading(false);
-            updateCoursesList(new ArrayList<>());
+        // Check if query is empty or just whitespace
+        if (query == null || query.trim().isEmpty()) {
+            Log.i(TAG, "Empty search query, loading all owned courses");
+            loadOwnedCourses();
             return;
         }
         
+        // Get current user to check owned courses
+        User currentUser = MarketplaceFirestoreManager.getInstance().getCurrentUser();
+        if (currentUser == null || currentUser.getOwnedCourses() == null || currentUser.getOwnedCourses().isEmpty()) {
+            Log.w(TAG, "No owned courses to search: user has no courses");
+            showLoading(false);
+            updateCoursesListWithSearchQuery(new ArrayList<>(), query);
+            return;
+        }
+        
+        Log.i(TAG, "Performing search for query: \"" + query + "\" in owned courses");
         MarketplaceFirestoreManager.getInstance().searchCourses(query, new MarketplaceFirestoreManager.OnCoursesLoadedListener() {
             @Override
             public void onCoursesLoaded(List<Course> allCourses) {
+                if (!isAdded()) {
+                    Log.w(TAG, "Fragment not attached, aborting UI update");
+                    return;
+                }
+                
                 // Filter to only include owned courses
                 List<Course> ownedCourses = new ArrayList<>();
                 for (Course course : allCourses) {
                     if (MarketplaceFirestoreManager.getInstance().userOwnsCourse(course.getId())) {
                         ownedCourses.add(course);
+                        Log.v(TAG, "Found owned course matching query: " + course.getName());
                     }
                 }
                 
                 showLoading(false);
-                updateCoursesList(ownedCourses);
+                Log.i(TAG, "Search completed with " + ownedCourses.size() + " results from owned courses");
+                
+                // Add the search term to the UI when showing results
+                if (ownedCourses.isEmpty()) {
+                    updateCoursesListWithSearchQuery(ownedCourses, query);
+                } else {
+                    updateCoursesList(ownedCourses);
+                }
             }
 
             @Override
             public void onError(String errorMessage) {
+                if (!isAdded()) {
+                    Log.w(TAG, "Fragment not attached, aborting error handling");
+                    return;
+                }
+                
                 showLoading(false);
+                Log.e(TAG, "Search error: " + errorMessage);
                 Toast.makeText(getContext(), "Search error: " + errorMessage, Toast.LENGTH_SHORT).show();
                 updateCoursesList(new ArrayList<>());
             }
         });
+    }
+    
+    /**
+     * Updates the course list with an indication of the search term that was used
+     */
+    private void updateCoursesListWithSearchQuery(List<Course> courses, String query) {
+        updateCoursesList(courses);
+        
+        // If no courses were found, update the empty message to include the search term
+        if (courses.isEmpty() && tvEmptyMessage != null) {
+            tvEmptyMessage.setText(getString(R.string.no_courses_found_for_query, query));
+        }
     }
     
     private void loadOwnedCourses() {
@@ -170,9 +220,16 @@ public class OwnedCoursesFragment extends Fragment implements CourseAdapter.Cour
         String userId = firebaseUser.getUid();
         Log.d(TAG, "Fetching fresh user data from Firestore with ID: " + userId);
         
+        long startTime = System.currentTimeMillis();
+        
         FirebaseFirestore.getInstance().collection("users").document(userId)
             .get()
             .addOnSuccessListener(documentSnapshot -> {
+                if (!isAdded()) {
+                    Log.w(TAG, "Fragment no longer attached, aborting owned courses load");
+                    return;
+                }
+                
                 if (documentSnapshot.exists()) {
                     Log.d(TAG, "Fresh user document retrieved from Firestore");
                     
@@ -186,37 +243,64 @@ public class OwnedCoursesFragment extends Fragment implements CourseAdapter.Cour
                         return;
                     }
                     
-                    Log.i(TAG, "Found " + ownedCourseIds.size() + " owned course IDs in Firestore: " + ownedCourseIds);
+                    Log.i(TAG, "Found " + ownedCourseIds.size() + " owned course IDs in Firestore");
+                    
+                    // Update cached user in MarketplaceFirestoreManager right away
+                    User currentUser = MarketplaceFirestoreManager.getInstance().getCurrentUser();
+                    if (currentUser != null) {
+                        currentUser.setOwnedCourses(ownedCourseIds);
+                        Log.d(TAG, "Updated cached user with fresh owned courses list");
+                    }
                     
                     // Now load all courses and filter by owned IDs
                     MarketplaceFirestoreManager.getInstance().loadAllCourses(new MarketplaceFirestoreManager.OnCoursesLoadedListener() {
                         @Override
                         public void onCoursesLoaded(List<Course> allCourses) {
+                            if (!isAdded()) {
+                                Log.w(TAG, "Fragment no longer attached, aborting UI update");
+                                return;
+                            }
+                            
                             // Filter to only include owned courses
                             List<Course> ownedCourses = new ArrayList<>();
+                            int missingCourses = 0;
                             
-                            for (Course course : allCourses) {
-                                Log.v(TAG, "Checking if course is owned: " + course.getId());
-                                if (ownedCourseIds.contains(course.getId())) {
-                                    Log.d(TAG, "Adding owned course to list: " + course.getName() + " (" + course.getId() + ")");
-                                    ownedCourses.add(course);
+                            // Check each owned course ID against available courses
+                            for (String ownedId : ownedCourseIds) {
+                                boolean found = false;
+                                for (Course course : allCourses) {
+                                    if (ownedId.equals(course.getId())) {
+                                        Log.v(TAG, "Adding owned course to list: " + course.getName() + " (" + course.getId() + ")");
+                                        ownedCourses.add(course);
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                                
+                                if (!found) {
+                                    missingCourses++;
+                                    Log.w(TAG, "Owned course with ID: " + ownedId + " not found in marketplace");
                                 }
                             }
                             
-                            showLoading(false);
-                            Log.d(TAG, "Filtered " + allCourses.size() + " courses to " + ownedCourses.size() + " owned courses");
-                            updateCoursesList(ownedCourses);
+                            // Sort courses by name for better display
+                            ownedCourses.sort((c1, c2) -> c1.getName().compareToIgnoreCase(c2.getName()));
                             
-                            // Update cached user in MarketplaceFirestoreManager
-                            User currentUser = MarketplaceFirestoreManager.getInstance().getCurrentUser();
-                            if (currentUser != null) {
-                                currentUser.setOwnedCourses(ownedCourseIds);
-                                Log.d(TAG, "Updated cached user with fresh owned courses list");
-                            }
+                            showLoading(false);
+                            long endTime = System.currentTimeMillis();
+                            Log.i(TAG, String.format("Loaded %d owned courses in %dms (%d missing courses)", 
+                                    ownedCourses.size(), (endTime - startTime), missingCourses));
+                            
+                            updateCoursesList(ownedCourses);
                         }
                         
                         @Override
                         public void onError(String errorMessage) {
+                            if (!isAdded()) {
+                                Log.w(TAG, "Fragment no longer attached, aborting error handling");
+                                return;
+                            }
+                            
                             Log.e(TAG, "Error loading courses: " + errorMessage);
                             
                             showLoading(false);
@@ -233,6 +317,11 @@ public class OwnedCoursesFragment extends Fragment implements CourseAdapter.Cour
                 }
             })
             .addOnFailureListener(e -> {
+                if (!isAdded()) {
+                    Log.w(TAG, "Fragment no longer attached, aborting error handling");
+                    return;
+                }
+                
                 Log.e(TAG, "Error fetching user document: " + e.getMessage());
                 showLoading(false);
                 updateCoursesList(new ArrayList<>());
