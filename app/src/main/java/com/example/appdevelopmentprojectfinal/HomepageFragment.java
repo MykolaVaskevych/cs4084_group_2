@@ -11,6 +11,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.RatingBar;
 import android.view.Gravity;
+import android.app.AlertDialog;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -349,6 +350,9 @@ public class HomepageFragment extends Fragment {
                 timeSlot.getStartTime() + "-" + timeSlot.getEndTime() +
                 " @ " + timeSlot.getLocation());
 
+        // Add click listener to show details
+        cardView.setOnClickListener(v -> showModuleDetailsDialog(module));
+
         // Add to container
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -356,6 +360,45 @@ public class HomepageFragment extends Fragment {
         params.setMargins(16, 8, 16, 8);
         moduleView.setLayoutParams(params);
         moduleListContainer.addView(moduleView);
+    }
+
+    private void showModuleDetailsDialog(Module module) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
+        builder.setTitle("Module Details");
+
+        // Inflate custom layout
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_module_details, null);
+        builder.setView(dialogView);
+
+        // Find views in dialog
+        TextView textViewCode = dialogView.findViewById(R.id.textView_module_code);
+        TextView textViewName = dialogView.findViewById(R.id.textView_module_name);
+        TextView textViewLecturer = dialogView.findViewById(R.id.textView_module_lecturer);
+        TextView textViewType = dialogView.findViewById(R.id.textView_module_type);
+        TextView textViewSchedule = dialogView.findViewById(R.id.textView_module_schedule);
+
+        // Set values
+        textViewCode.setText(module.getCode());
+        textViewName.setText(module.getName());
+        textViewLecturer.setText(module.getLecturer());
+        textViewType.setText(module.getType());
+
+        // Format schedule
+        StringBuilder scheduleBuilder = new StringBuilder();
+        for (TimeSlot slot : module.getTimeSlotList()) {
+            scheduleBuilder.append(slot.getDay())
+                    .append(" ")
+                    .append(slot.getStartTime())
+                    .append("-")
+                    .append(slot.getEndTime())
+                    .append(" @ ")
+                    .append(slot.getLocation())
+                    .append("\n");
+        }
+        textViewSchedule.setText(scheduleBuilder.toString().trim());
+
+        builder.setPositiveButton("OK", null);
+        builder.show();
     }
 
     private void showExampleModules() {
@@ -430,6 +473,9 @@ public class HomepageFragment extends Fragment {
         // Hide checkbox (we don't need it for events)
         eventView.findViewById(R.id.checkbox_todo_completed).setVisibility(View.GONE);
 
+        // Add click listener to show details
+        cardView.setOnClickListener(v -> showEventDetailsDialog(event));
+
         // Add to container
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -437,6 +483,34 @@ public class HomepageFragment extends Fragment {
         params.setMargins(16, 8, 16, 8);
         eventView.setLayoutParams(params);
         eventListContainer.addView(eventView);
+    }
+
+    private void showEventDetailsDialog(Event event) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
+        builder.setTitle(event.isEvent() ? "Event Details" : "Todo Details");
+
+        // Inflate custom layout
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_event_details, null);
+        builder.setView(dialogView);
+
+        // Find views in dialog
+        TextView textViewTitle = dialogView.findViewById(R.id.textView_details_title);
+        TextView textViewDescription = dialogView.findViewById(R.id.textView_details_description);
+        TextView textViewDate = dialogView.findViewById(R.id.textView_details_date);
+        TextView textViewTime = dialogView.findViewById(R.id.textView_details_time);
+
+        // Set values
+        textViewTitle.setText(event.getTitle());
+        textViewDescription.setText(event.getDescription());
+
+        // Format date and time
+        SimpleDateFormat dateFormat = new SimpleDateFormat("MMM dd, yyyy", Locale.getDefault());
+        SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
+        textViewDate.setText(dateFormat.format(event.getDate()));
+        textViewTime.setText(timeFormat.format(event.getDate()));
+
+        builder.setPositiveButton("OK", null);
+        builder.show();
     }
 
     private String getCountdownText(Date eventDate) {
