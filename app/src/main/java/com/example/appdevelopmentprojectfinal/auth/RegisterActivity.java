@@ -28,7 +28,7 @@ public class RegisterActivity extends AppCompatActivity {
     private static final String TAG = "RegisterActivity";
 
     // UI components
-    private EditText etEmail, etPassword, etFirstName, etLastName, etYear, etDepartment, etCourse;
+    private EditText etEmail, etPassword, etFirstName, etLastName;
     private Button btnRegister;
     private TextView tvLogin;
     private ProgressBar progressBar;
@@ -51,9 +51,6 @@ public class RegisterActivity extends AppCompatActivity {
         etPassword = findViewById(R.id.etPassword);
         etFirstName = findViewById(R.id.etFirstName);
         etLastName = findViewById(R.id.etLastName);
-        etYear = findViewById(R.id.etYear);
-        etDepartment = findViewById(R.id.etDepartment);
-        etCourse = findViewById(R.id.etCourse);
         btnRegister = findViewById(R.id.btnRegister);
         tvLogin = findViewById(R.id.tvLogin);
         progressBar = findViewById(R.id.progressBar);
@@ -72,9 +69,6 @@ public class RegisterActivity extends AppCompatActivity {
         String password = etPassword.getText().toString().trim();
         String firstName = etFirstName.getText().toString().trim();
         String lastName = etLastName.getText().toString().trim();
-        String yearStr = etYear.getText().toString().trim();
-        String department = etDepartment.getText().toString().trim();
-        String course = etCourse.getText().toString().trim();
         
         // Validate input
         if (TextUtils.isEmpty(email)) {
@@ -102,32 +96,6 @@ public class RegisterActivity extends AppCompatActivity {
             return;
         }
         
-        if (TextUtils.isEmpty(yearStr)) {
-            etYear.setError("Year is required");
-            return;
-        }
-        
-        int year;
-        try {
-            year = Integer.parseInt(yearStr);
-            if (year < 1 || year > 4) {
-                etYear.setError("Year must be between 1 and 4");
-                return;
-            }
-        } catch (NumberFormatException e) {
-            etYear.setError("Year must be a number");
-            return;
-        }
-        
-        if (TextUtils.isEmpty(department)) {
-            etDepartment.setError("Department is required");
-            return;
-        }
-
-        if (TextUtils.isEmpty(course)) {
-            etCourse.setError("Course is required");
-        }
-        
         // Show progress
         showLoading(true);
         
@@ -143,7 +111,7 @@ public class RegisterActivity extends AppCompatActivity {
                     FirebaseUser firebaseUser = firebaseAuth.getCurrentUser();
                     if (firebaseUser != null) {
                         // Re-create user profile in Firestore with provided details
-                        createUserProfile(firebaseUser.getUid(), email, firstName, lastName, year, department, course);
+                        createUserProfile(firebaseUser.getUid(), email, firstName, lastName);
                     }
                 } else {
                     // User doesn't exist, create a new one
@@ -156,7 +124,7 @@ public class RegisterActivity extends AppCompatActivity {
                                 FirebaseUser firebaseUser = firebaseAuth.getCurrentUser();
                                 if (firebaseUser != null) {
                                     // Create user profile in Firestore
-                                    createUserProfile(firebaseUser.getUid(), email, firstName, lastName, year, department, course);
+                                    createUserProfile(firebaseUser.getUid(), email, firstName, lastName);
                                 }
                             } else {
                                 // If sign in fails, display a message to the user.
@@ -174,22 +142,18 @@ public class RegisterActivity extends AppCompatActivity {
     /**
      * Create user profile in Firestore
      */
-    private void createUserProfile(String uid, String email, String firstName, String lastName, int year, String department, String course) {
+    private void createUserProfile(String uid, String email, String firstName, String lastName) {
         // Create a new user with default values
         User user = new User();
         user.setEmail(email);
         user.setFirstName(firstName);
         user.setLastName(lastName);
-        user.setYear(year);
-        user.setDepartment(department);
-        user.setCourse(course);
         
         // Default initial wallet balance
         user.setWallet(0.0);
         
-        // Default modules for CS students
-        List<String> defaultModules = Arrays.asList("CS4084", "CS4106", "CS4116", "CS4187", "CS4457");
-        user.setModules(defaultModules);
+        // Initialize empty modules list
+        user.setModules(new ArrayList<>());
         
         // Empty owned courses
         user.setOwnedCourses(new ArrayList<>());

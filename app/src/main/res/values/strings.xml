@@ -55,6 +55,7 @@
     <string name="video_error_message">Error playing video</string>
     <string name="video_loading_error_message">Error loading video: %s</string>
     <string name="owned">Owned</string>
+    <string name="your_course">Your Course</string>
     <string name="confirm_purchase">Confirm Purchase</string>
     <string name="purchase_question">Are you sure you want to purchase this course?</string>
     <string name="course_label">Course:</string>
@@ -67,6 +68,7 @@
     <string name="insufficient_funds">Insufficient funds to complete this purchase.</string>
     <string name="user_not_found">User not found</string>
     <string name="already_owned">You already own this course</string>
+    <string name="cannot_buy_own_course">You cannot buy your own course</string>
     <string name="by_author">By: %s</string>
     <string name="rating_count">%.1f (%d)</string>
     <string name="course_not_found">Course not found</string>

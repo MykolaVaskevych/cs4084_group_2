@@ -501,6 +501,15 @@ public class CourseDetailDialog extends DialogFragment {
         // Cache formatted strings for use in callback
         final String buyButtonText = getString(R.string.buy_price, formattedPrice);
         final String ownedText = getString(R.string.owned);
+        final String yourCourseText = getString(R.string.your_course);
+        
+        // Check if this is the user's own authored course
+        if (course.getAuthorId() != null && course.getAuthorId().equals(firebaseUser.getUid())) {
+            Log.i(TAG, "This is user's own authored course, disabling buy button");
+            btnBuy.setText(yourCourseText);
+            btnBuy.setEnabled(false);
+            return;
+        }
         
         // Check if the user owns this course
         checkIfUserOwnsCourse(firebaseUser.getUid(), course.getId(), isOwned -> {
@@ -539,8 +548,16 @@ public class CourseDetailDialog extends DialogFragment {
                 return;
             }
             
-            // Check if user already owns this course
             String uid = currentFirebaseUser.getUid();
+            
+            // Check if user is attempting to buy their own course
+            if (course.getAuthorId() != null && course.getAuthorId().equals(uid)) {
+                Log.w(TAG, "User attempting to buy their own course: " + course.getId());
+                Toast.makeText(requireContext(), getString(R.string.cannot_buy_own_course), Toast.LENGTH_SHORT).show();
+                return;
+            }
+            
+            // Check if user already owns this course
             checkIfUserOwnsCourse(uid, course.getId(), isOwned -> {
                 if (isOwned) {
                     Log.w(TAG, "User already owns course: " + course.getId());
