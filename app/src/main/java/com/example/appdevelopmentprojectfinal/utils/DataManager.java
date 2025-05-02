@@ -45,6 +45,9 @@ public class DataManager {
     private List<Course> courses;
     private Map<String, Module> moduleMap;
     private List<Event> events;
+    
+    // Keep track of initialization
+    private boolean isInitialized = false;
 
     // Private constructor for singleton
     private DataManager() {
@@ -53,6 +56,19 @@ public class DataManager {
         courses = new ArrayList<>();
         moduleMap = new HashMap<>();
         events = new ArrayList<>();
+    }
+    
+    /**
+     * Reset all data - call this after logout
+     */
+    public void reset() {
+        Log.d(TAG, "Resetting DataManager state");
+        currentUser = null;
+        modules.clear();
+        courses.clear();
+        moduleMap.clear();
+        events.clear();
+        isInitialized = false;
     }
 
     public static synchronized DataManager getInstance() {
@@ -63,13 +79,54 @@ public class DataManager {
     }
 
     public void initialize(Context context, String userId, OnUserLoadedListener listener) {
-        loadUserFromFirebase(userId, listener);
+        Log.d(TAG, "Initializing DataManager for user: " + userId + ", already initialized: " + isInitialized);
+        
+        if (isInitialized && currentUser != null) {
+            Log.d(TAG, "DataManager already initialized - using cached data");
+            if (listener != null) {
+                listener.onUserLoaded(currentUser);
+            }
+            return;
+        }
+        
+        // Reset state before initializing
+        reset();
+        
+        // Load all data
+        loadUserFromFirebase(userId, new OnUserLoadedListener() {
+            @Override
+            public void onUserLoaded(User user) {
+                isInitialized = true;
+                if (listener != null) {
+                    listener.onUserLoaded(user);
+                }
+            }
+            
+            @Override
+            public void onError(String error) {
+                Log.e(TAG, "Error loading user: " + error);
+                if (listener != null) {
+                    listener.onError(error);
+                }
+            }
+        });
+        
         loadModulesFromFirebase();
         loadCoursesFromFirebase();
         loadEventsFromFirebase(userId);
     }
 
     private void loadUserFromFirebase(String userId, OnUserLoadedListener listener) {
+        // Check if we're in a logout/login transition
+        if (userId == null || userId.isEmpty()) {
+            Log.w(TAG, "Skipping user data load - no user ID provided");
+            if (listener != null) {
+                listener.onError("No user ID provided");
+            }
+            return;
+        }
+
+        Log.i(TAG, "Loading user data for ID: " + userId);
         FirebaseDatabase database = FirebaseDatabase.getInstance("https://appdevelopmentprojectfinal-default-rtdb.europe-west1.firebasedatabase.app");
         DatabaseReference ref = database.getReference("users").child(userId);
 
@@ -81,21 +138,29 @@ public class DataManager {
                     if (user != null) {
                         currentUser = user;
                         Log.d(TAG, "User loaded from Firebase: " + user.getEmail());
-                        listener.onUserLoaded(user);
+                        if (listener != null) {
+                            listener.onUserLoaded(user);
+                        }
                     } else {
                         Log.w(TAG, "Snapshot exists but user is null");
-                        listener.onError("User data is null");
+                        if (listener != null) {
+                            listener.onError("User data is null");
+                        }
                     }
                 } else {
                     Log.w(TAG, "No user data found for ID: " + userId);
-                    listener.onError("User not found");
+                    if (listener != null) {
+                        listener.onError("User not found");
+                    }
                 }
             }
 
             @Override
             public void onCancelled(DatabaseError error) {
                 Log.e(TAG, "Failed to load user", error.toException());
-                listener.onError("Firebase error: " + error.getMessage());
+                if (listener != null) {
+                    listener.onError("Firebase error: " + error.getMessage());
+                }
             }
         });
     }
@@ -264,28 +329,39 @@ private void loadModulesFromAsset(Context context) {
      * Load user events from Firebase
      */
     private void loadEventsFromFirebase(String userId) {
+        // Skip if userId is empty or null
+        if (userId == null || userId.isEmpty()) {
+            Log.w(TAG, "Skipping event load - no user ID provided");
+            return;
+        }
+        
+        Log.d(TAG, "Loading events for user: " + userId);
         FirebaseDatabase database = FirebaseDatabase.getInstance("https://appdevelopmentprojectfinal-default-rtdb.europe-west1.firebasedatabase.app");
         DatabaseReference eventsRef = database.getReference("events");
         
-        // Query events where userId equals the current user
-        eventsRef.orderByChild("userId").equalTo(userId).addListenerForSingleValueEvent(new ValueEventListener() {
-            @Override
-            public void onDataChange(DataSnapshot snapshot) {
-                events.clear();
-                for (DataSnapshot eventSnapshot : snapshot.getChildren()) {
-                    Event event = eventSnapshot.getValue(Event.class);
-                    if (event != null) {
-                        events.add(event);
+        try {
+            // Query events where userId equals the current user
+            eventsRef.orderByChild("userId").equalTo(userId).addListenerForSingleValueEvent(new ValueEventListener() {
+                @Override
+                public void onDataChange(DataSnapshot snapshot) {
+                    events.clear();
+                    for (DataSnapshot eventSnapshot : snapshot.getChildren()) {
+                        Event event = eventSnapshot.getValue(Event.class);
+                        if (event != null) {
+                            events.add(event);
+                        }
                     }
+                    Log.d(TAG, "Loaded " + events.size() + " events from Firebase");
                 }
-                Log.d(TAG, "Loaded " + events.size() + " events from Firebase");
-            }
-
-            @Override
-            public void onCancelled(DatabaseError error) {
-                Log.e(TAG, "Error loading events from Firebase: " + error.getMessage());
-            }
-        });
+    
+                @Override
+                public void onCancelled(DatabaseError error) {
+                    Log.e(TAG, "Error loading events from Firebase: " + error.getMessage());
+                }
+            });
+        } catch (Exception e) {
+            Log.e(TAG, "Exception loading events: " + e.getMessage(), e);
+        }
     }
 
     /**

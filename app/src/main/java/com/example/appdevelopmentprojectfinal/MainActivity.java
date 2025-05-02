@@ -80,7 +80,13 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onError(String error) {
                 Log.e("MainActivity", "Error loading user: " + error);
-                Toast.makeText(MainActivity.this, "Error loading user data: " + error, Toast.LENGTH_LONG).show();
+                
+                // Handle errors silently - no need to show error messages during normal logout flow
+                Log.w("MainActivity", "Handled data loading error - redirecting to login");
+                // No Toast message - just proceed to login screen
+                
+                // Sign out to clear any invalid auth state
+                com.example.appdevelopmentprojectfinal.auth.AuthManager.getInstance().signOut();
                 
                 // Redirect to login
                 startActivity(new Intent(MainActivity.this, com.example.appdevelopmentprojectfinal.auth.LoginActivity.class));
