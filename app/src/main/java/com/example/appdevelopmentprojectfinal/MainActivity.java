@@ -88,7 +88,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-
         // Create notification channel and load fragments
 //        TimetableNotificationManager.createNotificationChannel(this);
 
@@ -117,26 +116,9 @@ public class MainActivity extends AppCompatActivity {
         fragmentTransaction.replace(R.id.frame_layout, fragment);
         fragmentTransaction.commit();
     }
+
     private void setupNavigation() {
 //        TimetableNotificationManager.createNotificationChannel(this);
-
-        binding.bottomNavigationView.setOnItemSelectedListener(item -> {
-            int itemId = item.getItemId();
-
-            if (itemId == R.id.home) {
-                replaceFragment(new HomepageFragment());
-            } else if (itemId == R.id.market) {
-                replaceFragment(new StoreFragment());
-            } else if (itemId == R.id.timetable) {
-                replaceFragment(new TimetableFragment());
-            } else if (itemId == R.id.calendar) {
-                replaceFragment(new CalendarFragment());
-            } else if (itemId == R.id.profile) {
-                replaceFragment(new ProfileFragment());
-            }
-
-            return true;
-        });
     }
     
     /**
