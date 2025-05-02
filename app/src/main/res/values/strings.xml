@@ -33,6 +33,9 @@
     <string name="no_courses_found">No courses found</string>
     <string name="no_recommended_courses">No courses found matching your interests</string>
     <string name="no_trending_courses">No trending courses available</string>
+    <string name="no_owned_courses">You don\'t own any courses yet</string>
+    <string name="all_courses">All Courses</string>
+    <string name="my_courses">My Courses</string>
     <string name="search_courses_hint">Search courses…</string>
     <string name="wallet_balance">Wallet: %s</string>
     

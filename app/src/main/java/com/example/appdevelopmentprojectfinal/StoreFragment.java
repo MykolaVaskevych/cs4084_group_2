@@ -15,34 +15,52 @@ import androidx.viewpager2.adapter.FragmentStateAdapter;
 import androidx.viewpager2.widget.ViewPager2;
 
 import com.example.appdevelopmentprojectfinal.marketplace.MarketplaceFirestoreManager;
-import com.example.appdevelopmentprojectfinal.marketplace.RecommendedCoursesFragment;
-import com.example.appdevelopmentprojectfinal.marketplace.TrendingCoursesFragment;
+import com.example.appdevelopmentprojectfinal.marketplace.AllCoursesFragment;
+import com.example.appdevelopmentprojectfinal.marketplace.OwnedCoursesFragment;
 import com.example.appdevelopmentprojectfinal.model.User;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 // Shows marketplace with tabs for different course categories
 public class StoreFragment extends Fragment {
     private static final String TAG = "TimetableApp:StoreFragment";
     
-    // Fragment argument keys for future filter implementation
-    private static final String ARG_CATEGORY = "category";
-    private static final String ARG_FILTER = "filter";
+    // Tab index argument key
+    private static final String ARG_TAB_INDEX = "tab_index";
 
     private TabLayout tabLayout;
     private ViewPager2 viewPager;
+    private int initialTabIndex = 0;
 
     public StoreFragment() {
         // Required empty public constructor
+    }
+    
+    /**
+     * Creates a new instance with specified tab to show
+     * @param tabIndex index of tab to show initially (0 for All, 1 for Owned)
+     * @return new fragment instance
+     */
+    public static StoreFragment newInstance(int tabIndex) {
+        StoreFragment fragment = new StoreFragment();
+        Bundle args = new Bundle();
+        args.putInt(ARG_TAB_INDEX, tabIndex);
+        fragment.setArguments(args);
+        return fragment;
     }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // Arguments processing can be added here if needed in the future
-
+        
+        // Check if we should open a specific tab
+        if (getArguments() != null) {
+            initialTabIndex = getArguments().getInt(ARG_TAB_INDEX, 0);
+            Log.d(TAG, "Creating StoreFragment with initial tab index: " + initialTabIndex);
+        }
     }
 
     @Override
@@ -73,28 +91,41 @@ public class StoreFragment extends Fragment {
         if (firebaseUser == null) {
             Log.e(TAG, "Cannot initialize user data: no authenticated user");
             Toast.makeText(getContext(), "Please login to access the marketplace", Toast.LENGTH_SHORT).show();
-            setUpViewPager(); // Still set up the UI, but it may not have user-specific data
+            setUpViewPager();
             return;
         }
         
         String userId = firebaseUser.getUid();
         
-        MarketplaceFirestoreManager.getInstance().loadCurrentUser(userId, new MarketplaceFirestoreManager.OnUserLoadedListener() {
-            @Override
-            public void onUserLoaded(User user) {
-                Log.i(TAG, "User loaded successfully: " + user.getEmail());
-                // Set up ViewPager with the tabs after user is loaded
+        // Fetch the latest user data directly from Firestore to ensure we have up-to-date information
+        FirebaseFirestore.getInstance().collection("users").document(userId)
+            .get()
+            .addOnSuccessListener(documentSnapshot -> {
+                if (documentSnapshot.exists()) {
+                    User user = documentSnapshot.toObject(User.class);
+                    if (user != null) {
+                        // Update cached user in MarketplaceFirestoreManager
+                        MarketplaceFirestoreManager.getInstance().setCurrentUser(user);
+                        Log.i(TAG, "User loaded and cached successfully from Firestore: " + user.getEmail());
+                        
+                        // Set up ViewPager with tabs
+                        setUpViewPager();
+                    } else {
+                        Log.e(TAG, "Failed to parse user data from Firestore");
+                        Toast.makeText(getContext(), "Error loading marketplace data", Toast.LENGTH_SHORT).show();
+                        setUpViewPager();
+                    }
+                } else {
+                    Log.e(TAG, "User document not found in Firestore");
+                    Toast.makeText(getContext(), "User data not found", Toast.LENGTH_SHORT).show();
+                    setUpViewPager();
+                }
+            })
+            .addOnFailureListener(e -> {
+                Log.e(TAG, "Error loading user data: " + e.getMessage());
+                Toast.makeText(getContext(), "Error loading marketplace data: " + e.getMessage(), Toast.LENGTH_SHORT).show();
                 setUpViewPager();
-            }
-            
-            @Override
-            public void onError(String errorMessage) {
-                Log.e(TAG, "Error loading user: " + errorMessage);
-                Toast.makeText(getContext(), "Error loading marketplace data: " + errorMessage, Toast.LENGTH_SHORT).show();
-                // Still set up the UI, but it may not have user-specific data
-                setUpViewPager();
-            }
-        });
+            });
     }
 
     // Setup tabs for viewpager
@@ -103,8 +134,8 @@ public class StoreFragment extends Fragment {
             return;
         }
         
-        // Create adapter for the viewpager
-        //StoreTabAdapter adapter = new StoreTabAdapter(getChildFragmentManager(), getLifecycle());
+        Log.d(TAG, "Setting up ViewPager and TabLayout");
+        
         StoreTabAdapter adapter = new StoreTabAdapter(requireActivity().getSupportFragmentManager(), getLifecycle());
         viewPager.setAdapter(adapter);
 
@@ -112,13 +143,55 @@ public class StoreFragment extends Fragment {
         new TabLayoutMediator(tabLayout, viewPager, (tab, position) -> {
             switch (position) {
                 case 0:
-                    tab.setText("Recommended");
+                    tab.setText(getString(R.string.all));
                     break;
                 case 1:
-                    tab.setText("Trending");
+                    tab.setText(getString(R.string.owned));
                     break;
             }
         }).attach();
+        
+        // Set initial tab if specified
+        if (initialTabIndex > 0 && initialTabIndex < adapter.getItemCount()) {
+            Log.d(TAG, "Setting initial tab to index: " + initialTabIndex);
+            viewPager.postDelayed(() -> {
+                viewPager.setCurrentItem(initialTabIndex, false);
+            }, 100); // Short delay to ensure ViewPager is fully initialized
+        }
+        
+        // Add a tab selection listener to refresh fragments when tab is selected
+        tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                Log.d(TAG, "Tab selected: " + tab.getPosition());
+            }
+
+            @Override
+            public void onTabUnselected(TabLayout.Tab tab) {
+                // Not needed
+            }
+
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {
+                // When a tab is reselected, force refresh its fragment
+                int position = tab.getPosition();
+                Log.d(TAG, "Tab reselected: " + position);
+                
+                if (position == 0) {
+                    // Refresh All Courses tab
+                    Fragment fragment = getChildFragmentManager().findFragmentByTag("f" + position);
+                    if (fragment instanceof AllCoursesFragment) {
+                        ((AllCoursesFragment) fragment).refreshData();
+                    }
+                } else if (position == 1) {
+                    // Refresh Owned Courses tab
+                    Fragment fragment = getChildFragmentManager().findFragmentByTag("f" + position);
+                    if (fragment instanceof OwnedCoursesFragment) {
+                        ((OwnedCoursesFragment) fragment).refreshData();
+                    }
+                }
+            }
+        });
     }
 
     // Tab adapter for marketplace sections
@@ -131,19 +204,48 @@ public class StoreFragment extends Fragment {
         @NonNull
         @Override
         public Fragment createFragment(int position) {
+            Log.d(TAG, "Creating fragment for tab position: " + position);
             switch (position) {
                 case 0:
-                    return new RecommendedCoursesFragment();
+                    return new AllCoursesFragment();
                 case 1:
-                    return new TrendingCoursesFragment();
+                    return new OwnedCoursesFragment();
                 default:
-                    return new RecommendedCoursesFragment();
+                    return new AllCoursesFragment();
             }
         }
 
         @Override
         public int getItemCount() {
-            return 2; // Number of tabs (Recommended and Trending)
+            return 2; // Number of tabs (All and Owned)
+        }
+    }
+    
+    @Override
+    public void onResume() {
+        super.onResume();
+        Log.d(TAG, "StoreFragment resumed");
+        
+        // Refresh user data when fragment is resumed
+        FirebaseUser firebaseUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (firebaseUser != null) {
+            String userId = firebaseUser.getUid();
+            Log.d(TAG, "Refreshing user data on resume: " + userId);
+            
+            FirebaseFirestore.getInstance().collection("users").document(userId)
+                .get()
+                .addOnSuccessListener(documentSnapshot -> {
+                    if (documentSnapshot.exists()) {
+                        User user = documentSnapshot.toObject(User.class);
+                        if (user != null) {
+                            // Update cached user in MarketplaceFirestoreManager
+                            MarketplaceFirestoreManager.getInstance().setCurrentUser(user);
+                            Log.d(TAG, "User data refreshed on resume");
+                        }
+                    }
+                })
+                .addOnFailureListener(e -> 
+                    Log.e(TAG, "Error refreshing user data on resume: " + e.getMessage()));
         }
     }
 }

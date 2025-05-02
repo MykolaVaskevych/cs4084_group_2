@@ -30,6 +30,7 @@ import androidx.fragment.app.DialogFragment;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.appdevelopmentprojectfinal.R;
+import com.example.appdevelopmentprojectfinal.StoreFragment;
 import com.example.appdevelopmentprojectfinal.model.Course;
 import com.example.appdevelopmentprojectfinal.model.Module;
 import com.google.android.material.appbar.CollapsingToolbarLayout;
@@ -1290,8 +1291,29 @@ public class CourseDetailDialog extends DialogFragment {
                     purchaseCompletedListener.onPurchaseCompleted();
                 }
                 
-                // Close dialog 
-                dismiss();
+                // Navigate to the Owned tab after purchase
+                try {
+                    if (getActivity() != null) {
+                        Log.i(TAG, "Navigating to Owned tab after successful purchase");
+                        
+                        // Already notified the listener above, no need to do it twice
+                        
+                        // Create a new StoreFragment instance that starts with the Owned tab
+                        StoreFragment storeFragment = StoreFragment.newInstance(1); // 1 is the index for the Owned tab
+                        
+                        // Replace the current fragment with this new one
+                        getActivity().getSupportFragmentManager()
+                            .beginTransaction()
+                            .replace(R.id.frame_layout, storeFragment)
+                            .commit();
+                    }
+                    
+                    // Close the dialog
+                    dismiss();
+                } catch (Exception e) {
+                    Log.e(TAG, "Error navigating to Owned tab: " + e.getMessage(), e);
+                    dismiss(); // Fallback - just dismiss the dialog
+                }
             } else {
                 // Non-null result means error with message
                 Log.e(TAG, "Purchase failed: " + result);
